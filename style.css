@@ -1,0 +1,1372 @@
+@import url('https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&family=Noto+Serif+SC:wght@400;700&display=swap');
+
+:root {
+    --chinese-red: #b22126;
+    --chinese-gold: #c9a227;
+    --chinese-indigo: #1d3f72;
+    --chinese-jade: #007956;
+    --chinese-ink: #2c2c2c;
+    --chinese-cream: #f5f0e6;
+    --chinese-brown: #5c3d2e;
+    --chinese-beige: #d4c4a8;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Noto Serif SC', 'STKaiti', 'KaiTi', 'SimKai', serif;
+    overflow: hidden;
+    background: var(--chinese-cream);
+}
+
+.navbar {
+    background: linear-gradient(135deg, var(--chinese-red) 0%, #8b1a1d 100%) !important;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    z-index: 1000;
+    border-bottom: 3px solid var(--chinese-gold);
+}
+
+.navbar-brand {
+    font-family: 'ZCOOL KuaiLe', 'STKaiti', serif;
+    font-weight: bold;
+    font-size: 1.5rem;
+    color: var(--chinese-gold) !important;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    letter-spacing: 3px;
+}
+
+.navbar-brand::before {
+    content: '❀ ';
+    color: var(--chinese-gold);
+}
+
+.navbar-brand::after {
+    content: ' ❀';
+    color: var(--chinese-gold);
+}
+
+.navbar-dark .navbar-toggler {
+    border-color: var(--chinese-gold);
+    background-color: rgba(201, 162, 39, 0.3);
+}
+
+#toolbar {
+    position: absolute;
+    top: 56px;
+    left: 0;
+    right: 0;
+    z-index: 999;
+    padding: 12px;
+}
+
+#toolbar .card-body {
+    background: linear-gradient(90deg, var(--chinese-cream) 0%, #ebe5d5 100%);
+    padding: 12px 15px;
+    border-radius: 0;
+    border-bottom: 2px solid var(--chinese-gold);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.btn-group .btn {
+    margin: 3px;
+    transition: all 0.3s ease;
+    font-family: 'Noto Serif SC', 'STKaiti', serif;
+    letter-spacing: 1px;
+    border-radius: 4px;
+}
+
+.btn-group .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.btn-outline-primary {
+    color: var(--chinese-indigo);
+    border-color: var(--chinese-indigo);
+    background-color: transparent;
+}
+
+.btn-outline-primary:hover {
+    background-color: var(--chinese-indigo);
+    color: var(--chinese-cream);
+    border-color: var(--chinese-indigo);
+}
+
+.btn-outline-success {
+    color: var(--chinese-jade);
+    border-color: var(--chinese-jade);
+}
+
+.btn-outline-success:hover {
+    background-color: var(--chinese-jade);
+    color: var(--chinese-cream);
+    border-color: var(--chinese-jade);
+}
+
+.btn-outline-warning {
+    color: var(--chinese-gold);
+    border-color: var(--chinese-gold);
+}
+
+.btn-outline-warning:hover {
+    background-color: var(--chinese-gold);
+    color: var(--chinese-ink);
+    border-color: var(--chinese-gold);
+}
+
+.btn-outline-info {
+    color: var(--chinese-indigo);
+    border-color: var(--chinese-indigo);
+}
+
+.btn-outline-info:hover {
+    background-color: var(--chinese-indigo);
+    color: var(--chinese-cream);
+    border-color: var(--chinese-indigo);
+}
+
+.btn-outline-secondary {
+    color: var(--chinese-brown);
+    border-color: var(--chinese-brown);
+}
+
+.btn-outline-secondary:hover {
+    background-color: var(--chinese-brown);
+    color: var(--chinese-cream);
+    border-color: var(--chinese-brown);
+}
+
+.btn-outline-danger {
+    color: var(--chinese-red);
+    border-color: var(--chinese-red);
+}
+
+.btn-outline-danger:hover {
+    background-color: var(--chinese-red);
+    color: var(--chinese-cream);
+    border-color: var(--chinese-red);
+}
+
+.dropdown-toggle::after {
+    border-top-color: var(--chinese-gold);
+}
+
+.dropdown-menu {
+    background: var(--chinese-cream);
+    border: 2px solid var(--chinese-gold);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    border-radius: 4px;
+}
+
+.dropdown-item {
+    color: var(--chinese-ink);
+    font-family: 'Noto Serif SC', 'STKaiti', serif;
+    padding: 10px 20px;
+    transition: all 0.2s;
+    border-bottom: 1px solid rgba(201, 162, 39, 0.3);
+}
+
+.dropdown-item:hover {
+    background: linear-gradient(90deg, var(--chinese-gold) 0%, #b8922a 100%);
+    color: var(--chinese-ink);
+}
+
+.dropdown-item:last-child {
+    border-bottom: none;
+}
+
+.map-container {
+    position: absolute;
+    top: 110px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1;
+    border-top: 3px solid var(--chinese-gold);
+}
+
+.ol-zoom {
+    top: 230px !important;
+}
+
+.weather-panel {
+    position: absolute;
+    top: 220px;
+    left: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 6px;
+    padding: 6px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    z-index: 998;
+    color: white;
+    min-width: 140px;
+    font-size: 0.65rem;
+}
+
+.weather-panel .air-quality-result {
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px solid rgba(255,255,255,0.3);
+    font-size: 0.65rem;
+}
+
+.weather-panel .aqi-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 3px 4px;
+    border-radius: 3px;
+    color: white;
+}
+
+.weather-panel .aqi-header div:first-child {
+    font-size: 0.55rem;
+}
+
+.weather-panel .aqi-header div:first-child div:last-child {
+    font-size: 0.9rem;
+}
+
+.weather-panel .aqi-header div:last-child {
+    font-size: 0.7rem;
+}
+
+.weather-panel .aqi-header div:last-child div:last-child {
+    font-size: 0.5rem;
+}
+
+.weather-panel .aqi-advice {
+    padding: 6px;
+    border-radius: 4px;
+    margin-top: 4px;
+    font-size: 0.75rem;
+    background: rgba(255,255,255,0.95);
+    border-left: 3px solid;
+    color: #333;
+}
+
+.weather-panel .crowd-section {
+    margin-top: 6px;
+    border-radius: 4px;
+    padding: 6px;
+    background: rgba(255,255,255,0.95);
+    border: 1px solid rgba(0,0,0,0.1);
+    color: #333;
+}
+
+.weather-panel .crowd-section div:first-child div:last-child {
+    font-size: 1.1rem;
+}
+
+.weather-panel .crowd-section div:last-child div:first-child {
+    font-size: 0.8rem;
+}
+
+.weather-panel .crowd-section div:last-child div:last-child {
+    font-size: 0.65rem;
+}
+
+.weather-panel .aqi-details {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+    margin-top: 6px;
+}
+
+.weather-panel .pollutant-item {
+    background: rgba(255,255,255,0.95);
+    padding: 4px;
+    border-radius: 3px;
+    text-align: center;
+    color: #333;
+}
+
+.weather-panel .pollutant-item div:first-child {
+    font-size: 0.6rem;
+}
+
+.weather-panel .pollutant-item div:last-child {
+    font-size: 0.8rem;
+}
+
+.weather-panel .pollutant-item .good {
+    color: #27ae60;
+}
+
+.weather-panel .pollutant-item .bad {
+    color: #e74c3c;
+}
+
+.weather-panel .air-quality-loading {
+    text-align: center;
+    padding: 4px;
+    font-size: 0.6rem;
+}
+
+.weather-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.weather-main {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.weather-icon {
+    font-size: 1.4rem;
+}
+
+.weather-temp {
+    font-size: 1.2rem;
+    font-weight: bold;
+    display: flex;
+    align-items: flex-start;
+}
+
+.temp-unit {
+    font-size: 0.6rem;
+    font-weight: normal;
+    margin-left: 2px;
+}
+
+.weather-condition {
+    font-size: 0.65rem;
+    opacity: 0.9;
+}
+
+.weather-details {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.6rem;
+    padding-top: 4px;
+    border-top: 1px solid rgba(255,255,255,0.3);
+}
+
+.weather-detail-item {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.info-panel {
+    position: absolute;
+    top: 120px;
+    right: 20px;
+    width: 300px;
+    background: linear-gradient(135deg, var(--chinese-cream) 0%, #e8e0d0 100%);
+    border: 2px solid var(--chinese-gold);
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    z-index: 998;
+    max-height: 450px;
+    overflow-y: auto;
+}
+
+.info-panel::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60%;
+    height: 3px;
+    background: var(--chinese-gold);
+}
+
+.info-panel h5 {
+    color: var(--chinese-red);
+    border-bottom: 2px solid var(--chinese-gold);
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+    font-family: 'ZCOOL KuaiLe', 'STKaiti', serif;
+    text-align: center;
+    letter-spacing: 2px;
+}
+
+#featureInfo {
+    font-size: 0.95rem;
+    line-height: 1.8;
+    color: var(--chinese-ink);
+}
+
+#featureInfo p {
+    margin: 8px 0;
+}
+
+.attractions-panel {
+    position: absolute;
+    top: 120px;
+    left: 20px;
+    width: 280px;
+    max-height: 400px;
+    background: linear-gradient(135deg, var(--chinese-cream) 0%, #e8e0d0 100%);
+    border: 2px solid var(--chinese-gold);
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    z-index: 998;
+    overflow-y: auto;
+    display: none;
+}
+
+.attractions-panel::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60%;
+    height: 3px;
+    background: var(--chinese-gold);
+}
+
+.attractions-panel h5 {
+    color: var(--chinese-red);
+    border-bottom: 2px solid var(--chinese-gold);
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+    font-family: 'ZCOOL KuaiLe', 'STKaiti', serif;
+    text-align: center;
+    letter-spacing: 2px;
+}
+
+.attraction-item {
+    padding: 10px;
+    margin-bottom: 8px;
+    background: rgba(255, 255, 255, 0.6);
+    border-radius: 6px;
+    border-left: 4px solid var(--chinese-gold);
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.attraction-item:hover {
+    background: linear-gradient(90deg, rgba(201, 162, 39, 0.2) 0%, rgba(201, 162, 39, 0.1) 100%);
+    transform: translateX(8px);
+    border-left-color: var(--chinese-red);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.attraction-item h6 {
+    color: var(--chinese-red);
+    margin-bottom: 5px;
+    font-weight: bold;
+    font-size: 0.95rem;
+}
+
+.attraction-item p {
+    font-size: 0.8rem;
+    color: var(--chinese-brown);
+    margin-bottom: 0;
+    line-height: 1.5;
+}
+
+.favorites-panel {
+    position: absolute;
+    top: 220px;
+    left: 20px;
+    width: 280px;
+    max-height: 350px;
+    background: linear-gradient(135deg, #fff9e6 0%, #ffe4b5 100%);
+    border: 2px solid #ffa500;
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    z-index: 998;
+    overflow-y: auto;
+}
+
+.favorites-panel::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60%;
+    height: 3px;
+    background: #ffa500;
+}
+
+.favorites-panel h5 {
+    color: #d35400;
+    border-bottom: 2px solid #ffa500;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+    font-family: 'ZCOOL KuaiLe', 'STKaiti', serif;
+    text-align: center;
+    letter-spacing: 2px;
+}
+
+.favorite-item {
+    padding: 10px;
+    margin-bottom: 8px;
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 6px;
+    border-left: 4px solid #ffa500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.favorite-item:hover {
+    background: linear-gradient(90deg, rgba(255, 165, 0, 0.2) 0%, rgba(255, 165, 0, 0.1) 100%);
+    transform: translateX(8px);
+    border-left-color: #d35400;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.favorite-item h6 {
+    color: #d35400;
+    margin-bottom: 5px;
+    font-weight: bold;
+    font-size: 0.95rem;
+}
+
+.favorite-item p {
+    font-size: 0.8rem;
+    color: var(--chinese-brown);
+    margin-bottom: 0;
+    line-height: 1.5;
+}
+
+.favorite-item .remove-favorite {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: none;
+    border: none;
+    color: #999;
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.favorite-item .remove-favorite:hover {
+    color: #e74c3c;
+    background: rgba(231, 76, 60, 0.1);
+}
+
+.favorite-item .view-on-map {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 4px 10px;
+    background: #ffa500;
+    color: white;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.favorite-item .view-on-map:hover {
+    background: #d35400;
+}
+
+.favorites-empty {
+    text-align: center;
+    padding: 30px 10px;
+    color: #999;
+}
+
+.favorites-empty .empty-icon {
+    font-size: 3rem;
+    margin-bottom: 10px;
+}
+
+.modal-content {
+    background: var(--chinese-cream);
+    border: 2px solid var(--chinese-gold);
+    border-radius: 8px;
+}
+
+.modal-header {
+    background: linear-gradient(135deg, var(--chinese-red) 0%, #8b1a1d 100%);
+    color: var(--chinese-gold);
+    border-bottom: 2px solid var(--chinese-gold);
+}
+
+.modal-header .btn-close {
+    filter: invert(1);
+}
+
+.modal-title {
+    font-family: 'ZCOOL KuaiLe', 'STKaiti', serif;
+    letter-spacing: 2px;
+}
+
+.modal-footer {
+    border-top: 2px solid var(--chinese-gold);
+}
+
+.btn-primary {
+    background-color: var(--chinese-red);
+    border-color: var(--chinese-red);
+}
+
+.btn-primary:hover {
+    background-color: #8b1a1d;
+    border-color: #8b1a1d;
+}
+
+.btn-secondary {
+    background-color: var(--chinese-brown);
+    border-color: var(--chinese-brown);
+}
+
+.btn-secondary:hover {
+    background-color: #4a3225;
+    border-color: #4a3225;
+}
+
+.ol-popup {
+    position: absolute;
+    background: var(--chinese-cream);
+    border: 2px solid var(--chinese-gold);
+    padding: 20px;
+    border-radius: 8px;
+    min-width: 250px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+
+.ol-popup:after {
+    border-top-color: var(--chinese-gold);
+}
+
+.ol-popup:before {
+    border-top-color: var(--chinese-gold);
+}
+
+.popup-content h4 {
+    color: var(--chinese-red);
+    margin-bottom: 12px;
+    font-size: 1.2rem;
+    border-bottom: 1px solid var(--chinese-gold);
+    padding-bottom: 8px;
+    text-align: center;
+}
+
+.popup-content p {
+    margin: 8px 0;
+    font-size: 0.95rem;
+}
+
+.popup-content .label {
+    font-weight: bold;
+    color: var(--chinese-brown);
+}
+
+.nav-link {
+    font-family: 'Noto Serif SC', 'STKaiti', serif;
+    letter-spacing: 1px;
+}
+
+.nav-link.active {
+    color: var(--chinese-gold) !important;
+}
+
+@media (max-width: 768px) {
+    #toolbar .btn-group {
+        width: 100%;
+    }
+    
+    .info-panel, .attractions-panel {
+        width: calc(100% - 40px);
+        left: 20px;
+        right: 20px;
+    }
+    
+    .attractions-panel {
+        left: 20px;
+    }
+    
+    .info-panel {
+        right: 20px;
+    }
+}
+
+.reviews-section {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 2px solid var(--chinese-gold);
+}
+
+.reviews-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.reviews-header h5 {
+    margin: 0;
+    color: var(--chinese-red);
+    font-size: 1rem;
+    font-family: 'Noto Serif SC', serif;
+}
+
+.reviews-rating {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.reviews-rating .score {
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: var(--chinese-gold);
+}
+
+.reviews-rating .stars {
+    color: var(--chinese-gold);
+    font-size: 0.9rem;
+}
+
+.review-item {
+    background: rgba(255, 255, 255, 0.6);
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 8px;
+    border-left: 3px solid var(--chinese-gold);
+}
+
+.review-item .review-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.review-item .review-user {
+    font-weight: bold;
+    color: var(--chinese-ink);
+    font-size: 0.85rem;
+}
+
+.review-item .review-date {
+    color: #999;
+    font-size: 0.75rem;
+}
+
+.review-item .review-rating {
+    color: var(--chinese-gold);
+    font-size: 0.8rem;
+}
+
+.review-item .review-content {
+    color: var(--chinese-brown);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.reviews-loading {
+    text-align: center;
+    padding: 15px;
+    color: #999;
+    font-size: 0.85rem;
+}
+
+.reviews-empty {
+    text-align: center;
+    padding: 15px;
+    color: #999;
+    font-size: 0.85rem;
+}
+
+.reviews-source {
+    text-align: right;
+    font-size: 0.7rem;
+    color: #999;
+    margin-top: 10px;
+}
+
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--chinese-beige);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--chinese-gold);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--chinese-red);
+}
+
+.traffic-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 4px;
+    font-size: 0.75rem;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.legend-color {
+    width: 16px;
+    height: 8px;
+    border-radius: 2px;
+}
+
+.mouse-position {
+    position: absolute !important;
+    right: 350px !important;
+    bottom: 55px !important;
+    z-index: 1200 !important;
+
+    color: red !important;
+    font-weight: bold;
+
+    background: rgba(255, 255, 255, 0.75);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+
+/* 天气和空气质量面板向上移动，避免挡住左下角鹰眼图 */
+.weather-panel {
+    top: 150px !important;
+    left: 20px !important;
+    max-height: 360px;
+    overflow-y: auto;
+    z-index: 998;
+}
+
+/* 鹰眼图固定放在左下角，并提高层级 */
+.ol-overviewmap {
+    left: 18px !important;
+    bottom: 36px !important;
+    z-index: 1000 !important;
+}
+
+/* 调整鹰眼图大小 */
+.ol-overviewmap .ol-overviewmap-map {
+    width: 165px !important;
+    height: 105px !important;
+}
+
+/* 经纬度坐标上移，并向左移动，避免被右侧属性栏挡住 */
+.mouse-position {
+    position: absolute;
+    right: 50px;
+    bottom: 55px;
+    z-index: 1200;
+    background: rgba(245, 240, 230, 0.95);
+    color: red !important;
+    border: 2px solid #c9a227;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 13px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* 屏幕比较窄时，坐标栏自动回到底部右侧 */
+@media (max-width: 900px) {
+    .mouse-position {
+        right: 20px;
+        bottom: 70px;
+    }
+
+    .weather-panel {
+        top: 140px !important;
+        max-height: 300px;
+    }
+
+    .ol-overviewmap .ol-overviewmap-map {
+        width: 140px !important;
+        height: 90px !important;
+    }
+}
+
+/* 顶部导航栏中的分析功能按钮区域 */
+.navbar-analysis-tools {
+    margin-left: auto;
+    margin-right: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    min-width: 420px;
+}
+
+/* 顶部分析按钮样式 */
+.navbar-analysis-btn {
+    font-weight: bold;
+    letter-spacing: 1px;
+    border: 2px solid #f1c40f;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+/* 小屏幕时自动换行，避免挤压 */
+@media (max-width: 1000px) {
+    .navbar-analysis-tools {
+        min-width: auto;
+        margin-left: 0;
+        margin-right: 0;
+        margin-top: 8px;
+        flex-wrap: wrap;
+    }
+}
+
+/* 属性查询搜索框 */
+.attr-search-box {
+    margin-left: 6px;
+    margin-right: 6px;
+}
+
+.attr-search-box input,
+.attr-search-box select,
+.attr-search-box button {
+    height: 42px;
+    font-size: 15px;
+}
+
+/* 屏幕较小时搜索框自动换行 */
+@media (max-width: 1200px) {
+    .attr-search-box {
+        width: 100% !important;
+        margin-top: 8px;
+    }
+}
+
+/* ===== 左侧工具 + 中间地图 + 右侧查询分析布局 ===== */
+
+/* 左侧工具栏 */
+#toolbar.left-tools-panel {
+    position: absolute !important;
+    top: 70px !important;
+    left: 12px !important;
+    right: auto !important;
+    bottom: 12px !important;
+    width: 250px !important;
+    z-index: 1001 !important;
+    padding: 12px !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    background: linear-gradient(180deg, var(--chinese-cream) 0%, #ebe5d5 100%);
+    border: 2px solid var(--chinese-gold);
+    border-radius: 8px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.22);
+}
+
+/* 去掉原来顶部工具栏卡片的影响 */
+#toolbar.left-tools-panel .card,
+#toolbar.left-tools-panel .card-body {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+}
+
+/* 左侧标题 */
+.tool-panel-title {
+    text-align: center;
+    color: var(--chinese-red);
+    font-weight: bold;
+    font-size: 18px;
+    letter-spacing: 2px;
+    padding-bottom: 10px;
+    margin-bottom: 12px;
+    border-bottom: 2px solid var(--chinese-gold);
+}
+
+/* 左侧分组 */
+.tool-section {
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px dashed rgba(201, 162, 39, 0.7);
+}
+
+.tool-section-title {
+    font-weight: bold;
+    color: var(--chinese-brown);
+    margin-bottom: 8px;
+    font-size: 15px;
+}
+
+/* 左侧按钮统一宽度 */
+.tool-btn {
+    width: 100%;
+    margin: 0 0 8px 0 !important;
+    text-align: center;
+    white-space: nowrap;
+}
+
+/* 图层管理下拉框不要太宽 */
+.layer-dropdown {
+    width: 235px !important;
+    max-height: 420px;
+    overflow-y: auto;
+}
+
+/* 中间地图区域：给左侧工具栏和右侧分析栏让位置 */
+.map-container {
+    position: absolute !important;
+    top: 56px !important;
+    left: 274px !important;
+    right: 330px !important;
+    bottom: 0 !important;
+    z-index: 1 !important;
+    border-top: 3px solid var(--chinese-gold);
+}
+
+/* 右侧属性 / 查询分析区 */
+.info-panel {
+    position: absolute !important;
+    top: 70px !important;
+    right: 12px !important;
+    bottom: 12px !important;
+    width: 305px !important;
+    max-height: none !important;
+    overflow-y: auto !important;
+    padding: 14px !important;
+    z-index: 1001 !important;
+}
+
+/* 右侧分组 */
+.right-query-section {
+    margin-bottom: 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px dashed rgba(201, 162, 39, 0.7);
+}
+
+.right-section-title {
+    color: var(--chinese-brown);
+    font-weight: bold;
+    margin-bottom: 8px;
+    font-size: 15px;
+}
+
+.right-result-title {
+    color: var(--chinese-red);
+    font-weight: bold;
+    margin: 10px 0;
+    padding-top: 8px;
+    border-top: 2px solid var(--chinese-gold);
+}
+
+/* 右侧查询结果区域 */
+#featureInfo {
+    font-size: 0.9rem;
+    line-height: 1.7;
+}
+
+/* 天气面板放到地图左上角，避开左侧工具栏 */
+.weather-panel {
+    top: 80px !important;
+    left: 286px !important;
+    max-height: 360px;
+    overflow-y: auto;
+    z-index: 998;
+}
+
+/* 经纬度坐标避开右侧面板 */
+.mouse-position {
+    right: 350px !important;
+    bottom: 55px !important;
+    z-index: 1200 !important;
+}
+
+/* 鹰眼图放在中间地图的左下角 */
+.ol-overviewmap {
+    left: 18px !important;
+    bottom: 36px !important;
+    z-index: 1000 !important;
+}
+
+.ol-overviewmap .ol-overviewmap-map {
+    width: 150px !important;
+    height: 95px !important;
+}
+
+/* 地图缩放按钮稍微下移 */
+.ol-zoom {
+    top: 18px !important;
+}
+
+/* 顶部导航栏里不再使用分析按钮区 */
+.navbar-analysis-tools {
+    display: none !important;
+}
+
+/* 小屏幕响应式：改为上下布局 */
+@media (max-width: 1000px) {
+    body {
+        overflow: auto;
+    }
+
+    #toolbar.left-tools-panel {
+        position: relative !important;
+        top: auto !important;
+        left: auto !important;
+        right: auto !important;
+        bottom: auto !important;
+        width: calc(100% - 24px) !important;
+        max-height: 260px;
+        margin: 12px;
+    }
+
+    .map-container {
+        position: relative !important;
+        top: auto !important;
+        left: 0 !important;
+        right: auto !important;
+        width: 100% !important;
+        height: 60vh !important;
+    }
+
+    .info-panel {
+        position: relative !important;
+        top: auto !important;
+        right: auto !important;
+        bottom: auto !important;
+        width: calc(100% - 24px) !important;
+        margin: 12px;
+        max-height: none !important;
+    }
+
+    .weather-panel {
+        left: 20px !important;
+        top: 120px !important;
+    }
+
+    .mouse-position {
+        right: 20px !important;
+        bottom: 70px !important;
+    }
+}
+
+/* ===== 右侧查询分析区 + 可关闭属性弹窗 ===== */
+
+/* 右侧查询分析区：默认显示 */
+.right-analysis-panel {
+    position: absolute !important;
+    top: 70px !important;
+    right: 12px !important;
+    bottom: 12px !important;
+    width: 305px !important;
+    z-index: 1001 !important;
+
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+
+    background: linear-gradient(180deg, var(--chinese-cream) 0%, #ebe5d5 100%);
+    border: 2px solid var(--chinese-gold);
+    border-radius: 8px;
+    padding: 14px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.22);
+}
+
+.right-analysis-panel h5 {
+    text-align: center;
+    color: var(--chinese-red);
+    font-weight: bold;
+    letter-spacing: 2px;
+    padding-bottom: 10px;
+    margin-bottom: 14px;
+    border-bottom: 2px solid var(--chinese-gold);
+}
+
+/* 属性信息弹窗：默认隐藏，不占右侧查询分析区 */
+#infoPanel.info-popup {
+    position: absolute !important;
+    top: 86px !important;
+    right: 335px !important;
+    bottom: auto !important;
+
+    width: 340px !important;
+    max-height: 72vh !important;
+    overflow-y: auto !important;
+
+    z-index: 1300 !important;
+    padding: 14px !important;
+
+    background: linear-gradient(180deg, var(--chinese-cream) 0%, #ebe5d5 100%);
+    border: 2px solid var(--chinese-gold);
+    border-radius: 8px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28);
+}
+
+/* 弹窗显示状态 */
+#infoPanel.info-popup.show {
+    display: block !important;
+}
+
+/* 弹窗标题栏 */
+.info-popup-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+    border-bottom: 2px solid var(--chinese-gold);
+}
+
+.info-popup-header h5 {
+    margin: 0;
+    color: var(--chinese-red);
+    font-weight: bold;
+    letter-spacing: 2px;
+}
+
+/* 弹窗内容 */
+#featureInfo {
+    font-size: 0.9rem;
+    line-height: 1.7;
+}
+
+/* 右侧分组样式 */
+.right-query-section {
+    margin-bottom: 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px dashed rgba(201, 162, 39, 0.7);
+}
+
+.right-section-title {
+    color: var(--chinese-brown);
+    font-weight: bold;
+    margin-bottom: 8px;
+    font-size: 15px;
+}
+
+.right-query-tip {
+    margin-top: 12px;
+    padding: 10px;
+    font-size: 13px;
+    color: #666;
+    background: rgba(255, 255, 255, 0.45);
+    border-radius: 6px;
+}
+
+/* 经纬度坐标避开右侧查询分析区 */
+.mouse-position {
+    right: 350px !important;
+    bottom: 55px !important;
+    z-index: 1200 !important;
+}
+
+/* ===== 修复顶部语言切换下拉菜单被右侧查询分析区遮挡的问题 ===== */
+
+/* 顶部导航栏层级提高 */
+.navbar,
+.navbar-custom,
+nav.navbar {
+    position: relative !important;
+    z-index: 3000 !important;
+}
+
+/* Bootstrap 下拉菜单层级提高 */
+.navbar .dropdown-menu,
+.dropdown-menu {
+    z-index: 4000 !important;
+}
+
+/* 右侧查询分析区层级保持低于顶部下拉菜单 */
+.right-analysis-panel {
+    z-index: 1001 !important;
+}
+
+/* 属性信息弹窗可以比右侧查询区高，但仍低于顶部下拉菜单 */
+#infoPanel.info-popup {
+    z-index: 2500 !important;
+}
+
+/* ===== 收藏夹面板居中显示 ===== */
+.favorites-panel {
+    position: fixed !important;
+
+    /* 居中显示在中间地图区域 */
+    left: calc(274px + (100vw - 274px - 330px) / 2) !important;
+    top: 50% !important;
+    transform: translate(-50%, -50%) !important;
+
+    width: 360px !important;
+    max-width: 90vw !important;
+    max-height: 72vh !important;
+
+    background: linear-gradient(135deg, #fff9e6 0%, #ffe4b5 100%);
+    border: 2px solid #ffa500;
+    border-radius: 10px;
+    padding: 15px;
+
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.32);
+    z-index: 2600 !important;
+
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+}
+
+/* 收藏夹顶部装饰线 */
+.favorites-panel::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60%;
+    height: 3px;
+    background: #ffa500;
+}
+
+/* 收藏夹标题 */
+.favorites-panel h5 {
+    color: #d35400;
+    border-bottom: 2px solid #ffa500;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+    font-family: 'ZCOOL KuaiLe', 'STKaiti', serif;
+    text-align: center;
+    letter-spacing: 2px;
+}
+
+/* 小屏幕时改成屏幕居中 */
+@media (max-width: 1000px) {
+    .favorites-panel {
+        left: 50% !important;
+        top: 50% !important;
+        width: calc(100% - 40px) !important;
+        max-height: 70vh !important;
+        transform: translate(-50%, -50%) !important;
+    }
+}
+
+/* ===== 路线规划窗口位置下移 ===== */
+#routeModal .modal-dialog {
+    margin-top: 160px !important;
+}
+
+/* ===== 模拟轨迹相关窗口位置下移 ===== */
+
+/* 模拟轨迹窗口：选择轨迹景点 */
+#trackModal .modal-dialog {
+    margin-top: 100px !important;
+}
+
+/* 选择轨迹窗口 */
+#trackListModal .modal-dialog {
+    margin-top: 100px !important;
+}

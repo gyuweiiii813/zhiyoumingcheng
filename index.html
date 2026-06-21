@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智游名城—文旅资源推荐与空间分析系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@8.2.0/ol.css">
+    <link rel="stylesheet" href="style.css">
+    <script src="i18n.js"></script>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">
+                <i class="bi bi-geo-alt"></i> 智游名城
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#" data-bs-toggle="collapse" data-bs-target="#toolbar" onclick="showMapTools()">地图工具</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#importModal">导入数据</a>
+                    </li>
+                    <li class="nav-item dropdown">
+    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+        导出数据
+    </a>
+    <ul class="dropdown-menu">
+        <li><a class="dropdown-item" href="#" onclick="exportGISData('geojson'); hideAttractions();">导出 GeoJSON</a></li>
+        <li><a class="dropdown-item" href="#" onclick="exportGISData('kml'); hideAttractions();">导出 KML</a></li>
+        <li><a class="dropdown-item" href="#" onclick="exportGISData('gpx'); hideAttractions();">导出 GPX</a></li>
+    </ul>
+</li>
+                </ul>
+
+
+            </div>
+        </div>
+    </nav>
+
+    <div id="toolbar" class="collapse show left-tools-panel">
+    <div class="tool-panel-title">地图工具</div>
+
+    <div class="tool-section">
+        <div class="tool-section-title">基础控制</div>
+
+        <div class="dropdown w-100 mb-2">
+            <button type="button" class="btn btn-outline-primary dropdown-toggle tool-btn" data-bs-toggle="dropdown">
+                切换底图
+            </button>
+            <ul class="dropdown-menu" id="basemapMenu">
+    <li><a class="dropdown-item" href="#" onclick="switchBasemap('osm')">高德地图</a></li>
+    <li><a class="dropdown-item" href="#" onclick="switchBasemap('satellite')">Esri卫星影像</a></li>
+    <li><a class="dropdown-item" href="#" onclick="switchBasemap('terrain')">OpenTopoMap地形图</a></li>
+    <li><a class="dropdown-item" href="#" onclick="switchBasemap('gaodeSatellite')">高德卫星</a></li>
+</ul>
+        </div>
+
+        <div class="dropdown w-100 mb-2">
+            <button type="button" class="btn btn-outline-dark dropdown-toggle tool-btn" data-bs-toggle="dropdown">
+                图层管理
+            </button>
+
+            <div class="dropdown-menu p-3 layer-dropdown" onclick="event.stopPropagation();">
+                <div class="mb-2 fw-bold">图层显示 / 隐藏</div>
+
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="attractionsLayerVisible" checked
+                           onchange="toggleManagedLayer('attractions', this.checked)">
+                    <label class="form-check-label" for="attractionsLayerVisible">景点图层</label>
+                </div>
+
+                <label class="form-label mt-1">景点透明度</label>
+                <input type="range" class="form-range" min="0" max="1" step="0.1" value="1"
+                       oninput="setManagedLayerOpacity('attractions', this.value)">
+
+                <div class="mt-2">
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="moveManagedLayerUp('attractions')">景点上移</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="moveManagedLayerDown('attractions')">景点下移</button>
+                </div>
+
+                <hr>
+
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="drawLayerVisible" checked
+                           onchange="toggleManagedLayer('draw', this.checked)">
+                    <label class="form-check-label" for="drawLayerVisible">绘制图层</label>
+                </div>
+
+                <label class="form-label mt-1">绘制透明度</label>
+                <input type="range" class="form-range" min="0" max="1" step="0.1" value="1"
+                       oninput="setManagedLayerOpacity('draw', this.value)">
+
+                <div class="mt-2">
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="moveManagedLayerUp('draw')">绘制上移</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="moveManagedLayerDown('draw')">绘制下移</button>
+                </div>
+            </div>
+        </div>
+
+        <button type="button" class="btn btn-outline-primary tool-btn" onclick="resetView()">复位</button>
+        <button type="button" class="btn btn-outline-dark tool-btn" onclick="toggleCustomFullScreen()">全屏</button>
+    </div>
+
+    <div class="tool-section">
+        <div class="tool-section-title">绘制工具</div>
+
+        <button type="button" class="btn btn-outline-success tool-btn" onclick="startDraw('Point')">绘制点</button>
+        <button type="button" class="btn btn-outline-success tool-btn" onclick="startDraw('LineString')">绘制线</button>
+        <button type="button" class="btn btn-outline-success tool-btn" onclick="startDraw('Polygon')">绘制面</button>
+        <button type="button" class="btn btn-outline-success tool-btn" onclick="startDraw('Circle')">绘制圆</button>
+        <button type="button" class="btn btn-outline-success tool-btn" onclick="startRectangleDraw()">绘制矩形</button>
+    </div>
+
+    <div class="tool-section">
+        <div class="tool-section-title">编辑与测量</div>
+
+        <button type="button" class="btn btn-outline-warning tool-btn" onclick="enableFeatureEdit()">编辑要素</button>
+        <button type="button" class="btn btn-outline-danger tool-btn" onclick="deleteSelectedFeature()">删除选中</button>
+        <button type="button" class="btn btn-outline-info tool-btn" onclick="startMeasure('distance')">距离测量</button>
+        <button type="button" class="btn btn-outline-info tool-btn" onclick="startMeasure('area')">面积测量</button>
+        <button type="button" class="btn btn-outline-dark tool-btn" onclick="exportMapImage()">地图截图</button>
+    </div>
+
+    <div class="tool-section">
+        <div class="tool-section-title">轨迹与其他</div>
+
+        <button type="button" class="btn btn-outline-primary tool-btn" onclick="startTrackDraw()">模拟轨迹</button>
+        <button type="button" class="btn btn-outline-success tool-btn" onclick="playTrack()">播放轨迹</button>
+        <button type="button" class="btn btn-outline-danger tool-btn" onclick="stopTrackAnimation()">停止播放</button>
+        <button type="button" class="btn btn-outline-secondary tool-btn" onclick="clearFeatures()">清除要素</button>
+        <button type="button" class="btn btn-outline-danger tool-btn" onclick="clearDraw()">退出绘制</button>
+        <button type="button" class="btn btn-outline-warning tool-btn" onclick="showFavorites()">⭐ 收藏夹</button>
+        <button type="button" class="btn btn-outline-primary tool-btn" data-bs-toggle="modal" data-bs-target="#routeModal">路线规划</button>
+    </div>
+</div>
+
+    <div id="map" class="map-container"></div>
+    <div id="mouse-position" class="mouse-position"></div>
+
+    <div id="weatherPanel" class="weather-panel" style="display: none;">
+        <div class="weather-content">
+            <div class="weather-main">
+                <span class="weather-icon" id="weatherIcon">🌤️</span>
+                <div class="weather-temp">
+                    <span id="weatherTemp">--</span>
+                    <span class="temp-unit">°C</span>
+                </div>
+                <div class="weather-condition" id="weatherCondition">点击景点查看天气</div>
+            </div>
+            <div class="weather-details">
+                <div class="weather-detail-item">
+                    <span>💧</span>
+                    <span id="weatherHumidity">--</span>%
+                </div>
+                <div class="weather-detail-item">
+                    <span>💨</span>
+                    <span id="weatherWind">--</span>
+                </div>
+                <div class="weather-detail-item">
+                    <span>🫧</span>
+                    AQI <span id="weatherAqi">--</span>
+                </div>
+            </div>
+            <div id="airQualityResult" class="air-quality-result"></div>
+        </div>
+    </div>
+
+    <div id="rightAnalysisPanel" class="right-analysis-panel">
+    <h5>查询分析区</h5>
+
+    <div class="right-query-section">
+        <div class="right-section-title">景点查询</div>
+
+        <div class="dropdown w-100">
+    <button type="button" id="attractionQueryButton" class="btn btn-outline-primary dropdown-toggle w-100" data-bs-toggle="dropdown">
+        选择景点
+    </button>
+    <ul class="dropdown-menu w-100" id="attractionQueryMenu">
+    </ul>
+</div>
+    </div>
+
+    <div class="right-query-section">
+        <div class="right-section-title">属性查询</div>
+
+        <input type="text" id="attrSearchKeyword" class="form-control mb-2" placeholder="输入景点名称、类别或地址">
+
+        <select id="attrSearchCategory" class="form-select mb-2">
+            <option value="">全部类别</option>
+            <option value="历史遗址">历史遗址</option>
+            <option value="古建筑">古建筑</option>
+            <option value="文化景区">文化景区</option>
+            <option value="自然风光">自然风光</option>
+            <option value="园林">园林</option>
+        </select>
+
+        <button type="button" class="btn btn-outline-primary w-100" onclick="searchAttractionsByAttribute()">
+            属性查询
+        </button>
+    </div>
+
+    <div class="right-query-section">
+        <div class="right-section-title">空间查询</div>
+
+        <button type="button" class="btn btn-outline-info w-100 mb-2" onclick="startBoxSelect()">框选查询</button>
+        <button type="button" class="btn btn-outline-primary w-100 mb-2" onclick="startCircleSelect()">圆选查询</button>
+        <button type="button" class="btn btn-outline-primary w-100" onclick="startPolygonSelect()">多边形查询</button>
+    </div>
+
+    <div class="right-query-section">
+        <div class="right-section-title">空间分析</div>
+
+        <button type="button" class="btn btn-warning w-100 mb-2" onclick="toggleHeatmap()">景点热力图</button>
+        <button type="button" class="btn btn-info w-100 mb-2" onclick="startBufferAnalysis()">缓冲区分析</button>
+        <button type="button" class="btn btn-outline-warning w-100 mb-2" onclick="startOverlayAnalysis()">叠加分析</button>
+        <button type="button" class="btn btn-success w-100" onclick="toggleClusterLayer()">聚类分析</button>
+    </div>
+
+    <div class="right-result-title">更多结果信息</div>
+    <div class="right-query-section">
+
+    <select id="recommendPreference" class="form-select form-select-sm mb-2">
+        <option value="all">综合推荐</option>
+        <option value="history">历史文化偏好</option>
+        <option value="nature">自然风光偏好</option>
+        <option value="ancient">古城园林偏好</option>
+    </select>
+
+    <select id="recommendMode" class="form-select form-select-sm mb-2">
+        <option value="rating">按评分推荐</option>
+        <option value="heat">按热度推荐</option>
+        <option value="distance">按当前地图中心距离推荐</option>
+    </select>
+
+    <button type="button" class="btn btn-outline-danger btn-sm w-100 mb-2" onclick="generateSmartRecommendation()">
+        智能景点推荐
+    </button>
+
+    <button type="button" class="btn btn-outline-primary btn-sm w-100 mb-2" onclick="recommendThemeRoute('history')">
+        历史文化路线
+    </button>
+
+    <button type="button" class="btn btn-outline-success btn-sm w-100 mb-2" onclick="recommendThemeRoute('nature')">
+        自然风光路线
+    </button>
+
+    <button type="button" class="btn btn-outline-warning btn-sm w-100 mb-2" onclick="recommendThemeRoute('ancient')">
+        古城园林路线
+    </button>
+
+    <button type="button" class="btn btn-outline-secondary btn-sm w-100 mb-2" onclick="showHotRanking()">
+        景点热度排行榜
+    </button>
+
+    <button type="button" class="btn btn-outline-dark btn-sm w-100 mb-2" onclick="showCulturalCreativeAnalysis()">
+        文创开发建议
+    </button>
+
+    <button type="button" class="btn btn-outline-info btn-sm w-100 mb-2" onclick="startServiceCircleAnalysis()">
+        游客服务圈分析
+    </button>
+
+    <hr class="my-2">
+
+    <select id="travelPlanProvince" class="form-select form-select-sm mb-2" onchange="updateTravelPlanCityOptions()">
+    <option value="all">全部省份 / 区域</option>
+    <option value="北京">北京</option>
+    <option value="陕西">陕西</option>
+    <option value="浙江">浙江</option>
+    <option value="江苏">江苏</option>
+    <option value="安徽">安徽</option>
+    <option value="广西">广西</option>
+    <option value="云南">云南</option>
+    <option value="福建">福建</option>
+    <option value="四川">四川</option>
+    <option value="山西">山西</option>
+    <option value="河南">河南</option>
+    <option value="山东">山东</option>
+    <option value="湖南">湖南</option>
+    <option value="湖北">湖北</option>
+    <option value="广东">广东</option>
+</select>
+
+<select id="travelPlanCity" class="form-select form-select-sm mb-2">
+    <option value="all">全部城市 / 区域</option>
+</select>
+
+<select id="travelPlanDuration" class="form-select form-select-sm mb-2">
+    <option value="half">半日游</option>
+    <option value="one">一日游</option>
+    <option value="two">两日游</option>
+</select>
+
+<select id="travelPlanPreference" class="form-select form-select-sm mb-2">
+    <option value="all">综合偏好</option>
+    <option value="history">历史文化偏好</option>
+    <option value="nature">自然风光偏好</option>
+    <option value="ancient">古城园林偏好</option>
+</select>
+
+<button type="button" class="btn btn-outline-danger btn-sm w-100 mb-2" onclick="generateTravelPlan()">
+    一键生成游览计划
+</button>
+
+<button type="button" class="btn btn-outline-primary btn-sm w-100 mb-2" onclick="compareAttractions()">
+    景点对比分析
+</button>
+
+<button type="button" class="btn btn-outline-warning btn-sm w-100 mb-2" onclick="showVisitorPressureWarning()">
+    游客承载压力预警
+</button>
+
+<button type="button" class="btn btn-outline-success btn-sm w-100 mb-2" onclick="showTourismValueEvaluation()">
+    文旅资源价值评价
+</button>
+
+<select id="routeCostType" class="form-select form-select-sm mb-2">
+    <option value="history">历史文化路线成本</option>
+    <option value="nature">自然风光路线成本</option>
+    <option value="ancient">古城园林路线成本</option>
+</select>
+
+<button type="button" class="btn btn-outline-dark btn-sm w-100 mb-2" onclick="estimateThemeRouteCost()">
+    旅游路线成本估算
+</button>
+
+    <button type="button" class="btn btn-outline-secondary btn-sm w-100" onclick="clearBusinessExpansionLayer()">
+        清除分析图层
+    </button>
+</div>
+    <div class="right-query-tip">
+    点击右侧工具进行查询分析，结果会弹出显示。
+</div>
+</div>
+
+<!-- 属性 / 查询结果弹窗：默认隐藏，需要时才显示 -->
+<div id="infoPanel" class="info-panel info-popup" style="display: none;">
+    <div class="info-popup-header">
+        <h5>属性信息</h5>
+        <button type="button" class="btn-close" onclick="closeInfoPanel()" aria-label="关闭"></button>
+    </div>
+
+    <div id="featureInfo">点击要素查看详细信息</div>
+</div>
+
+    <div class="modal fade" id="importModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">导入数据</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body">
+                <p class="text-muted">
+                    支持导入 GeoJSON、KML、GPX 格式数据。
+                </p>
+
+                <input type="file" id="geojsonFile" accept=".geojson,.json,.kml,.gpx" class="form-control">
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="importGISData()">导入</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+    <div class="modal fade" id="routeModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">🗺️ 路线规划</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">起点（手动输入地址或从下拉列表选择景点）</label>
+                        <div class="input-group">
+                            <input type="text" id="routeOrigin" class="form-control" placeholder="手动输入地址">
+                            <select id="routeOriginSelect" class="form-select" style="width: auto;">
+                                <option value="">选择景点</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">终点（选择景点）</label>
+                        <select id="routeDestination" class="form-select">
+                            <option value="">-- 请选择目的地景点 --</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">路线方案</label>
+                        <select id="routeStrategy" class="form-select">
+                            <option value="0">推荐路线（默认）</option>
+                            <option value="2">最快路线</option>
+                            <option value="1">最短距离</option>
+                            <option value="3">不走高速</option>
+                            <option value="4">躲避拥堵</option>
+                            <option value="7">收费最少</option>
+                        </select>
+                    </div>
+                    <div id="routeResult" class="mt-3"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                    <button type="button" class="btn btn-primary" onclick="planRoute()">规划路线</button>
+                    <button type="button" class="btn btn-outline-danger" onclick="clearRoutes()">清除路线</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="trackListModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">📍 选择轨迹</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted">选择一个轨迹进行操作</p>
+                    <div id="trackListContent"></div>
+                    <div id="trackActionButtons" class="mt-3" style="display: none;">
+                        <p id="selectedTrackName" class="fw-bold mb-2"></p>
+                        <button type="button" class="btn btn-primary" onclick="playSelectedTrack()">▶ 播放</button>
+                        <button type="button" class="btn btn-danger" onclick="deleteSelectedTrack()">🗑️ 删除</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="trackModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">🎯 选择轨迹景点</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">🚩 起点</label>
+                        <select id="trackOrigin" class="form-select">
+                            <option value="">-- 请选择起点 --</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">📍 途经点 <span class="text-muted fw-normal">(可多选)</span></label>
+                        <select id="trackWaypoints" class="form-select" multiple size="5">
+                        </select>
+                        <small class="text-muted">按住 Ctrl 或 Command 可多选</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">🏁 终点</label>
+                        <select id="trackDestination" class="form-select">
+                            <option value="">-- 请选择终点 --</option>
+                        </select>
+                    </div>
+                    <div id="trackSelectedInfo" class="alert alert-info mt-3" style="display: none;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="confirmTrackSelection()">确定</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="attractionsList" class="attractions-panel">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h5 class="mb-0">景点列表</h5>
+            <button type="button" class="btn-close" onclick="hideAttractions()"></button>
+        </div>
+        <div id="attractionsContent"></div>
+    </div>
+
+    <div id="favoritesPanel" class="favorites-panel" style="display: none;">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h5 class="mb-0">⭐ 我的收藏</h5>
+            <button type="button" class="btn-close" onclick="hideFavoritesPanel()"></button>
+        </div>
+        <div id="favoritesContent"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/ol@8.2.0/dist/ol.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="main.js"></script>
+</body>
+</html>
