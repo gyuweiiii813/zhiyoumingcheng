@@ -11978,6 +11978,8 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
     let weatherQueryToken = 0;
     let lastClickedWeatherFeature = null;
     let weatherManuallyClosed = true;
+    const amapWeatherCache = {};
+const AMAP_WEATHER_CACHE_TIME = 5 * 60 * 1000; // 缓存 5 分钟
 
     function getWeatherPanel() {
         let panel = document.getElementById('weatherPanel');
@@ -12293,6 +12295,21 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
         const name = getFeatureNameSafe(feature);
         const province = getFeatureProvinceSafe(feature);
         const city = inferAmapCityName(name, province, getFeatureCitySafe(feature));
+        const cachedWeather = amapWeatherCache[city];
+
+if (cachedWeather && Date.now() - cachedWeather.time < AMAP_WEATHER_CACHE_TIME) {
+    renderWeatherPanelStable(feature, cachedWeather.data);
+    return;
+}
+
+        // 点击景点后先立即刷新天气框，避免等待高德接口时感觉卡顿
+renderWeatherPanelStable(feature, {
+    weather: '查询中',
+    temperature: '--',
+    humidity: '--',
+    windDirection: '--',
+    windPower: '--'
+});
 
         if (!window.AMap || !AMap.Weather) {
             console.warn('高德 AMap.Weather 未加载，使用兜底天气。');
@@ -12332,7 +12349,12 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
                     return;
                 }
 
-                renderWeatherPanelStable(feature, data);
+                amapWeatherCache[city] = {
+    time: Date.now(),
+    data: data
+};
+
+renderWeatherPanelStable(feature, data);
             });
         });
     }
