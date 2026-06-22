@@ -12320,13 +12320,13 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
 
         const featureInfo = document.getElementById('featureInfo');
 
-        if (featureInfo) {
-            featureInfo.innerHTML = '';
-            featureInfo.style.display = 'none';
-        }
+if (featureInfo) {
+    featureInfo.innerHTML = '';
+    featureInfo.style.display = 'none';
+}
 
-        currentSelectedFeature = null;
-        window.currentSelectedFeature = null;
+currentSelectedFeature = null;
+window.currentSelectedFeature = null;
     }
 
     function isAttractionFeature(feature) {
