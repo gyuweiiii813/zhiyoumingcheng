@@ -11180,3 +11180,285 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
         }
     }, 800);
 })();
+
+// =====================================================
+// 路线规划弹窗修复：防止“路线方案”下拉框被景点列表覆盖
+// 功能：
+// 1. 将路线方案恢复为：时间最短、距离最短、花费最少
+// 2. 防止 forceRefreshRoutePlanningDropdowns 把路线方案误填成景点
+// 3. 打开路线规划弹窗时自动修复
+// 请放在 main.js 最下面
+// =====================================================
+(function () {
+    if (window.__routeStrategySelectFixInstalled) {
+        return;
+    }
+
+    window.__routeStrategySelectFixInstalled = true;
+
+    function getLocalTextAroundSelect(select) {
+        const texts = [];
+
+        if (select.id) {
+            const label = document.querySelector('label[for="' + select.id + '"]');
+            if (label) {
+                texts.push(label.innerText || label.textContent || '');
+            }
+        }
+
+        if (select.previousElementSibling) {
+            texts.push(select.previousElementSibling.innerText || select.previousElementSibling.textContent || '');
+        }
+
+        if (select.parentElement) {
+            const parentLabel = select.parentElement.querySelector('label');
+            if (parentLabel) {
+                texts.push(parentLabel.innerText || parentLabel.textContent || '');
+            }
+
+            // 只取父元素前面一点文本，避免把整个弹窗文字都算进去
+            const parentText = select.parentElement.innerText || select.parentElement.textContent || '';
+            texts.push(parentText.slice(0, 80));
+        }
+
+        return texts.join(' ');
+    }
+
+    function isRouteStrategySelect(select) {
+        if (!select) {
+            return false;
+        }
+
+        const idNameClass = [
+            select.id || '',
+            select.name || '',
+            select.className || ''
+        ].join(' ').toLowerCase();
+
+        const localText = getLocalTextAroundSelect(select);
+
+        // 起点、终点、途经点一定不是路线方案
+        if (
+            localText.includes('起点') ||
+            localText.includes('终点') ||
+            localText.includes('目的地') ||
+            localText.includes('途经')
+        ) {
+            return false;
+        }
+
+        if (
+            idNameClass.includes('strategy') ||
+            idNameClass.includes('policy') ||
+            idNameClass.includes('scheme') ||
+            idNameClass.includes('mode') ||
+            idNameClass.includes('plan')
+        ) {
+            return true;
+        }
+
+        if (
+            localText.includes('路线方案') ||
+            localText.includes('路线策略') ||
+            localText.includes('规划方案') ||
+            localText.includes('出行方案')
+        ) {
+            return true;
+        }
+
+        // 如果它原来已经有这些词，也认为是路线方案
+        const optionText = Array.from(select.options || []).map(function (option) {
+            return option.textContent || '';
+        }).join(' ');
+
+        if (
+            optionText.includes('最短距离') ||
+            optionText.includes('距离最短') ||
+            optionText.includes('时间最短') ||
+            optionText.includes('最短时间') ||
+            optionText.includes('花费最少') ||
+            optionText.includes('费用最少')
+        ) {
+            return true;
+        }
+
+        return false;
+    }
+
+    function restoreRouteStrategySelect(select) {
+        if (!select) {
+            return;
+        }
+
+        select.dataset.routeStrategySelect = 'true';
+
+        select.innerHTML = `
+            <option value="time">时间最短</option>
+            <option value="distance">距离最短</option>
+            <option value="cost">花费最少</option>
+        `;
+
+        // 默认选时间最短，你也可以改成 distance
+        select.value = select.value || 'time';
+    }
+
+    function restoreAllRouteStrategySelects() {
+        const routeModal = document.getElementById('routeModal');
+
+        if (!routeModal) {
+            return;
+        }
+
+        const selects = routeModal.querySelectorAll('select');
+
+        selects.forEach(function (select) {
+            if (isRouteStrategySelect(select) || select.dataset.routeStrategySelect === 'true') {
+                restoreRouteStrategySelect(select);
+            }
+        });
+    }
+
+    // 如果旧的 fillRoutePlanSelect 函数误填路线方案，这里拦住它
+    const oldFillRoutePlanSelect = window.fillRoutePlanSelect;
+
+    window.fillRoutePlanSelect = function (select, placeholderText) {
+        if (isRouteStrategySelect(select) || select.dataset.routeStrategySelect === 'true') {
+            restoreRouteStrategySelect(select);
+            return;
+        }
+
+        if (typeof oldFillRoutePlanSelect === 'function') {
+            return oldFillRoutePlanSelect(select, placeholderText);
+        }
+    };
+
+    // 如果旧的判断函数把路线方案当成景点选择框，这里修正
+    const oldIsRoutePlanAttractionSelect = window.isRoutePlanAttractionSelect;
+
+    window.isRoutePlanAttractionSelect = function (select) {
+        if (isRouteStrategySelect(select) || select.dataset.routeStrategySelect === 'true') {
+            return false;
+        }
+
+        if (typeof oldIsRoutePlanAttractionSelect === 'function') {
+            return oldIsRoutePlanAttractionSelect(select);
+        }
+
+        const localText = getLocalTextAroundSelect(select);
+
+        return (
+            localText.includes('起点') ||
+            localText.includes('终点') ||
+            localText.includes('目的地') ||
+            localText.includes('途经')
+        );
+    };
+
+    // 覆盖路线规划下拉刷新函数：只刷新起点/终点/途经点，不动路线方案
+    const oldForceRefreshRoutePlanningDropdowns = window.forceRefreshRoutePlanningDropdowns;
+
+    window.forceRefreshRoutePlanningDropdowns = function () {
+        const routeModal = document.getElementById('routeModal');
+
+        if (!routeModal) {
+            return;
+        }
+
+        const selects = routeModal.querySelectorAll('select');
+
+        selects.forEach(function (select) {
+            if (isRouteStrategySelect(select) || select.dataset.routeStrategySelect === 'true') {
+                restoreRouteStrategySelect(select);
+                return;
+            }
+
+            const localText = getLocalTextAroundSelect(select);
+
+            let placeholder = '-- 请选择景点 --';
+
+            if (localText.includes('起点')) {
+                placeholder = '-- 请选择起点景点 --';
+            }
+
+            if (localText.includes('终点') || localText.includes('目的地')) {
+                placeholder = '-- 请选择目的地景点 --';
+            }
+
+            if (localText.includes('途经')) {
+                placeholder = '-- 请选择途经景点 --';
+            }
+
+            if (
+                localText.includes('起点') ||
+                localText.includes('终点') ||
+                localText.includes('目的地') ||
+                localText.includes('途经')
+            ) {
+                if (typeof oldFillRoutePlanSelect === 'function') {
+                    oldFillRoutePlanSelect(select, placeholder);
+                }
+            }
+        });
+
+        restoreAllRouteStrategySelects();
+    };
+
+    // 打开路线规划弹窗时自动修复
+    function bindRouteStrategyFix() {
+        const routeModal = document.getElementById('routeModal');
+
+        if (!routeModal || routeModal.dataset.routeStrategyFixBound) {
+            return;
+        }
+
+        routeModal.addEventListener('show.bs.modal', function () {
+            setTimeout(restoreAllRouteStrategySelects, 50);
+            setTimeout(restoreAllRouteStrategySelects, 300);
+            setTimeout(restoreAllRouteStrategySelects, 800);
+        });
+
+        routeModal.addEventListener('shown.bs.modal', function () {
+            setTimeout(restoreAllRouteStrategySelects, 50);
+            setTimeout(restoreAllRouteStrategySelects, 300);
+            setTimeout(restoreAllRouteStrategySelects, 800);
+        });
+
+        routeModal.dataset.routeStrategyFixBound = 'true';
+    }
+
+    setTimeout(bindRouteStrategyFix, 500);
+    setTimeout(bindRouteStrategyFix, 1500);
+    setTimeout(bindRouteStrategyFix, 3000);
+
+    setTimeout(restoreAllRouteStrategySelects, 500);
+    setTimeout(restoreAllRouteStrategySelects, 1500);
+    setTimeout(restoreAllRouteStrategySelects, 3000);
+    setTimeout(restoreAllRouteStrategySelects, 5000);
+
+    // 防止旧函数后续又覆盖它
+    setInterval(function () {
+        const routeModal = document.getElementById('routeModal');
+
+        if (!routeModal) {
+            return;
+        }
+
+        const selects = routeModal.querySelectorAll('select');
+
+        selects.forEach(function (select) {
+            if (select.dataset.routeStrategySelect === 'true') {
+                const optionText = Array.from(select.options || []).map(function (option) {
+                    return option.textContent || '';
+                }).join(' ');
+
+                if (
+                    !optionText.includes('时间最短') ||
+                    !optionText.includes('距离最短') ||
+                    !optionText.includes('花费最少')
+                ) {
+                    restoreRouteStrategySelect(select);
+                }
+            }
+        });
+    }, 1000);
+})();
