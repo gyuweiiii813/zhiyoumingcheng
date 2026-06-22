@@ -1493,6 +1493,9 @@ function startBoxSelect() {
         clearBoxSelectListeners();
 
         alert('框选查询完成，共查询到 ' + results.length + ' 个景点。');
+        if (typeof clearSpatialQueryRangeFeatures === 'function') {
+    clearSpatialQueryRangeFeatures();
+}
     });
 
     // 鼠标移动时动态更新矩形预览
@@ -4709,6 +4712,9 @@ polygonSelectMoveKey = map.on('pointermove', function(evt) {
         clearPolygonSelectListeners();
 
         alert('多边形查询完成，共查询到 ' + results.length + ' 个景点。');
+        if (typeof clearSpatialQueryRangeFeatures === 'function') {
+    clearSpatialQueryRangeFeatures();
+}
     };
 
     map.getViewport().addEventListener('contextmenu', polygonSelectRightClickHandler);
@@ -4884,6 +4890,9 @@ function startCircleSelect() {
         clearCircleSelectListeners();
 
         alert('圆选查询完成，共查询到 ' + results.length + ' 个景点。');
+        if (typeof clearSpatialQueryRangeFeatures === 'function') {
+    clearSpatialQueryRangeFeatures();
+}
     });
 
     // 鼠标移动：动态预览圆形范围
@@ -12507,4 +12516,117 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
     }, true);
 
     window.hideAttractionWeatherAndInfo = hideAttractionWeatherAndInfo;
+})();
+
+// =====================================================
+// 缓冲区分析自动清除控制
+// 规则：
+// 1. 点击“缓冲区分析”本身，不清除，允许继续做缓冲区
+// 2. 点击除“缓冲区分析”以外的其他功能按钮/菜单/下拉框，自动清除缓冲区图形
+// 3. 不影响缓冲区分析结果文字，只清除地图上的缓冲区绘制要素
+// =====================================================
+(function () {
+    if (window.__bufferAutoClearInstalled) {
+        return;
+    }
+
+    window.__bufferAutoClearInstalled = true;
+
+    function clearBufferAnalysisFeatures() {
+        if (typeof bufferSource !== 'undefined' && bufferSource) {
+            bufferSource.clear();
+        }
+    }
+
+    window.clearBufferAnalysisFeatures = clearBufferAnalysisFeatures;
+
+    function isBufferAnalysisAction(target) {
+        if (!target) {
+            return false;
+        }
+
+        const onclickText =
+            target.getAttribute && target.getAttribute('onclick')
+                ? target.getAttribute('onclick')
+                : '';
+
+        const text = (
+            target.innerText ||
+            target.textContent ||
+            ''
+        );
+
+        const nearbyText = (
+            target.closest('.sidebar, .right-panel, .query-section, .card, .dropdown, .dropdown-menu')?.innerText ||
+            ''
+        );
+
+        return (
+            onclickText.includes('startBufferAnalysis') ||
+            text.includes('缓冲区分析') ||
+            nearbyText.includes('缓冲区分析') && target.closest('button, a, .btn, .tool-btn')
+        );
+    }
+
+    document.addEventListener('click', function (event) {
+        const target = event.target;
+
+        if (!target) {
+            return;
+        }
+
+        // 地图本体点击不清除，避免影响缓冲区分析时选择中心景点
+        if (target.closest('#map')) {
+            return;
+        }
+
+        // 点击缓冲区分析按钮本身，不清除
+        if (isBufferAnalysisAction(target)) {
+            return;
+        }
+
+        const isFunctionElement =
+            target.closest('button') ||
+            target.closest('a') ||
+            target.closest('select') ||
+            target.closest('input') ||
+            target.closest('.btn') ||
+            target.closest('.dropdown-item') ||
+            target.closest('.nav-link') ||
+            target.closest('.tool-btn');
+
+        if (isFunctionElement) {
+            clearBufferAnalysisFeatures();
+        }
+    }, true);
+
+    document.addEventListener('change', function (event) {
+        const target = event.target;
+
+        if (!target) {
+            return;
+        }
+
+        if (isBufferAnalysisAction(target)) {
+            return;
+        }
+
+        if (
+            target.tagName === 'SELECT' ||
+            target.tagName === 'INPUT'
+        ) {
+            clearBufferAnalysisFeatures();
+        }
+    }, true);
+
+    // 兼容：如果用户点了“清除要素”，也一起清除缓冲区
+    const oldClearFeatures = window.clearFeatures;
+
+    window.clearFeatures = function () {
+        if (typeof oldClearFeatures === 'function') {
+            oldClearFeatures.apply(this, arguments);
+        }
+
+        clearBufferAnalysisFeatures();
+    };
 })();
