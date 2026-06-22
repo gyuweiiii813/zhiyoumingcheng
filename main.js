@@ -12305,29 +12305,38 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
     window.__attractionPanelWhitelistControlInstalled = true;
 
     function hideAttractionWeatherAndInfo() {
-        const weatherPanel = document.getElementById('weatherPanel');
+    const weatherPanel = document.getElementById('weatherPanel');
 
-        if (weatherPanel) {
-            weatherPanel.classList.remove(
-                'clean-weather-active',
-                'light-weather-active',
-                'weather-lock-active'
-            );
-            weatherPanel.style.display = 'none';
-            weatherPanel.style.visibility = 'hidden';
-            weatherPanel.style.opacity = '0';
-        }
+    if (weatherPanel) {
+        weatherPanel.classList.remove(
+            'clean-weather-active',
+            'light-weather-active',
+            'weather-lock-active'
+        );
 
-        const featureInfo = document.getElementById('featureInfo');
-
-if (featureInfo) {
-    featureInfo.innerHTML = '';
-    featureInfo.style.display = 'none';
-}
-
-currentSelectedFeature = null;
-window.currentSelectedFeature = null;
+        weatherPanel.style.display = 'none';
+        weatherPanel.style.visibility = 'hidden';
+        weatherPanel.style.opacity = '0';
     }
+
+    const featureInfo = document.getElementById('featureInfo');
+
+    if (featureInfo) {
+        featureInfo.innerHTML = '';
+        featureInfo.style.display = 'none';
+    }
+
+    // 隐藏外层属性信息框，不然会只剩标题栏
+    const infoPanel = document.getElementById('infoPanel');
+
+    if (infoPanel) {
+        infoPanel.classList.remove('show');
+        infoPanel.style.display = 'none';
+    }
+
+    currentSelectedFeature = null;
+    window.currentSelectedFeature = null;
+}
 
     function isAttractionFeature(feature) {
         if (!feature || !feature.getGeometry()) {
