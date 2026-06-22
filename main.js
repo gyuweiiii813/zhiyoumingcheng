@@ -9944,3 +9944,68 @@ function fixCustomAttractionData() {
         }
     }, 500);
 })();
+
+// =====================================================
+// 景点去重：防止 data 和 main.js 补充数据重复添加同名景点
+// 例如：桂林山水重复出现时，只保留第一个
+// =====================================================
+function removeDuplicateAttractionsByName() {
+    if (typeof attractionsSource === 'undefined' || !attractionsSource) {
+        return;
+    }
+
+    const seenNames = new Set();
+    const duplicateFeatures = [];
+
+    attractionsSource.getFeatures().forEach(function(feature) {
+        const name =
+            feature.get('name') ||
+            feature.get('title') ||
+            feature.get('名称') ||
+            '';
+
+        if (!name) {
+            return;
+        }
+
+        if (seenNames.has(name)) {
+            duplicateFeatures.push(feature);
+        } else {
+            seenNames.add(name);
+        }
+    });
+
+    duplicateFeatures.forEach(function(feature) {
+        attractionsSource.removeFeature(feature);
+    });
+
+    if (duplicateFeatures.length > 0) {
+        console.log(
+            '已清理重复景点：',
+            duplicateFeatures.map(function(feature) {
+                return feature.get('name') || feature.get('title') || feature.get('名称');
+            })
+        );
+    }
+
+    // 去重后刷新右侧景点下拉
+    if (typeof refreshAttractionQueryDropdown === 'function') {
+        refreshAttractionQueryDropdown();
+    }
+
+    // 去重后刷新路线规划下拉
+    if (typeof forceRefreshRoutePlanningDropdowns === 'function') {
+        forceRefreshRoutePlanningDropdowns();
+    }
+
+    // 去重后刷新模拟轨迹下拉
+    if (typeof forceRefreshTrackSelects === 'function') {
+        forceRefreshTrackSelects();
+    }
+}
+
+// 多执行几次，防止后面的补充数据函数又把重复景点加回来
+setTimeout(removeDuplicateAttractionsByName, 800);
+setTimeout(removeDuplicateAttractionsByName, 1800);
+setTimeout(removeDuplicateAttractionsByName, 3500);
+setTimeout(removeDuplicateAttractionsByName, 6000);
