@@ -10009,3 +10009,362 @@ setTimeout(removeDuplicateAttractionsByName, 800);
 setTimeout(removeDuplicateAttractionsByName, 1800);
 setTimeout(removeDuplicateAttractionsByName, 3500);
 setTimeout(removeDuplicateAttractionsByName, 6000);
+
+// =====================================================
+// GitHub Pages 路线规划 / 模拟轨迹最终修复版
+// 作用：
+// 1. 路线不再是大圆弧，而是折线路线
+// 2. 轨迹播放速度变慢
+// 3. 路线最后一个点强制落在终点景点坐标上
+// 请放在 main.js 最下面
+// =====================================================
+(function () {
+    if (window.__staticRouteFinalPatchInstalled) {
+        return;
+    }
+
+    window.__staticRouteFinalPatchInstalled = true;
+
+    const oldFetch = window.fetch.bind(window);
+
+    function makeJsonResponse(data) {
+        return Promise.resolve(
+            new Response(JSON.stringify(data), {
+                status: 200,
+                headers: {
+                    'Content-Type': 'application/json; charset=utf-8'
+                }
+            })
+        );
+    }
+
+    function getUrlParam(urlText, key) {
+        try {
+            const query = urlText.split('?')[1] || '';
+            const params = new URLSearchParams(query);
+            return params.get(key) || '';
+        } catch (e) {
+            return '';
+        }
+    }
+
+    // 支持 [110,25]、110,25、"110.1,25.2" 这几种坐标格式
+    function parseCoordinateText(text) {
+        if (!text) {
+            return null;
+        }
+
+        text = decodeURIComponent(String(text)).trim();
+
+        try {
+            const jsonValue = JSON.parse(text);
+            if (
+                Array.isArray(jsonValue) &&
+                jsonValue.length >= 2 &&
+                !isNaN(Number(jsonValue[0])) &&
+                !isNaN(Number(jsonValue[1]))
+            ) {
+                return [Number(jsonValue[0]), Number(jsonValue[1])];
+            }
+        } catch (e) {}
+
+        const match = text.match(/(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)/);
+
+        if (match) {
+            const lon = Number(match[1]);
+            const lat = Number(match[3]);
+
+            if (!isNaN(lon) && !isNaN(lat)) {
+                return [lon, lat];
+            }
+        }
+
+        return null;
+    }
+
+    function getFeatureName(feature) {
+        if (!feature) {
+            return '';
+        }
+
+        return (
+            feature.get('name') ||
+            feature.get('title') ||
+            feature.get('名称') ||
+            feature.get('id') ||
+            ''
+        );
+    }
+
+    // 根据景点名称找到坐标
+    function findAttractionCoordinateByName(nameText) {
+        if (!nameText || typeof attractionsSource === 'undefined' || !attractionsSource) {
+            return null;
+        }
+
+        const keyword = decodeURIComponent(String(nameText)).trim();
+
+        if (!keyword) {
+            return null;
+        }
+
+        const features = attractionsSource.getFeatures();
+
+        let foundFeature = features.find(function (feature) {
+            const name = getFeatureName(feature);
+            return name === keyword;
+        });
+
+        if (!foundFeature) {
+            foundFeature = features.find(function (feature) {
+                const name = getFeatureName(feature);
+                return name && (name.includes(keyword) || keyword.includes(name));
+            });
+        }
+
+        if (foundFeature && foundFeature.getGeometry()) {
+            const coord = foundFeature.getGeometry().getCoordinates();
+            return [Number(coord[0]), Number(coord[1])];
+        }
+
+        return null;
+    }
+
+    function resolveRoutePoint(text) {
+        return parseCoordinateText(text) || findAttractionCoordinateByName(text);
+    }
+
+    function calculateDistanceMeters(coord1, coord2) {
+        if (
+            typeof ol !== 'undefined' &&
+            ol.sphere &&
+            typeof ol.sphere.getDistance === 'function'
+        ) {
+            return ol.sphere.getDistance(coord1, coord2);
+        }
+
+        const dx = coord1[0] - coord2[0];
+        const dy = coord1[1] - coord2[1];
+
+        return Math.sqrt(dx * dx + dy * dy) * 111000;
+    }
+
+    // 把一个线段拆成很多点，点越多，模拟轨迹播放越慢
+    function densifySegment(start, end, count) {
+        const coords = [];
+
+        for (let i = 0; i <= count; i++) {
+            const t = i / count;
+
+            const lon = start[0] + (end[0] - start[0]) * t;
+            const lat = start[1] + (end[1] - start[1]) * t;
+
+            coords.push([
+                Number(lon.toFixed(6)),
+                Number(lat.toFixed(6))
+            ]);
+        }
+
+        return coords;
+    }
+
+    // 生成不那么平滑的折线路径
+    function createBrokenLineRoute(start, end) {
+        const dx = end[0] - start[0];
+        const dy = end[1] - start[1];
+
+        // 远距离路线多给几个折点，避免一条大弧线
+        const p1 = [
+            start[0] + dx * 0.25,
+            start[1] + dy * 0.08
+        ];
+
+        const p2 = [
+            start[0] + dx * 0.48,
+            start[1] + dy * 0.42
+        ];
+
+        const p3 = [
+            start[0] + dx * 0.72,
+            start[1] + dy * 0.70
+        ];
+
+        const keyPoints = [
+            start,
+            p1,
+            p2,
+            p3,
+            end
+        ];
+
+        let result = [];
+
+        for (let i = 0; i < keyPoints.length - 1; i++) {
+            const segment = densifySegment(keyPoints[i], keyPoints[i + 1], 28);
+
+            if (i > 0) {
+                segment.shift();
+            }
+
+            result = result.concat(segment);
+        }
+
+        // 关键：最后一个点强制等于终点坐标
+        result[result.length - 1] = [
+            Number(end[0].toFixed(6)),
+            Number(end[1].toFixed(6))
+        ];
+
+        return result;
+    }
+
+    // 多个景点：起点 -> 途经点 -> 终点
+    function createRouteThroughPoints(points) {
+        let result = [];
+
+        for (let i = 0; i < points.length - 1; i++) {
+            const part = createBrokenLineRoute(points[i], points[i + 1]);
+
+            if (i > 0) {
+                part.shift();
+            }
+
+            result = result.concat(part);
+        }
+
+        const finalPoint = points[points.length - 1];
+
+        // 再次强制最后落点为终点景点
+        result[result.length - 1] = [
+            Number(finalPoint[0].toFixed(6)),
+            Number(finalPoint[1].toFixed(6))
+        ];
+
+        return result;
+    }
+
+    function coordsToPolyline(coords) {
+        return coords.map(function (coord) {
+            return coord[0] + ',' + coord[1];
+        }).join(';');
+    }
+
+    function parseWaypoints(urlText) {
+        const waypointText =
+            getUrlParam(urlText, 'waypoints') ||
+            getUrlParam(urlText, 'waypoint') ||
+            getUrlParam(urlText, 'via') ||
+            '';
+
+        if (!waypointText) {
+            return [];
+        }
+
+        const decoded = decodeURIComponent(waypointText);
+
+        return decoded
+            .split(/[;|]/)
+            .map(function (item) {
+                return resolveRoutePoint(item);
+            })
+            .filter(function (coord) {
+                return coord && coord.length >= 2;
+            });
+    }
+
+    function createStaticRouteResponse(urlText) {
+        const originText =
+            getUrlParam(urlText, 'origin') ||
+            getUrlParam(urlText, 'start') ||
+            getUrlParam(urlText, 'from') ||
+            '';
+
+        const destinationText =
+            getUrlParam(urlText, 'destination') ||
+            getUrlParam(urlText, 'end') ||
+            getUrlParam(urlText, 'to') ||
+            '';
+
+        let start = resolveRoutePoint(originText);
+        let end = resolveRoutePoint(destinationText);
+        const waypoints = parseWaypoints(urlText);
+
+        if (!start && typeof map !== 'undefined') {
+            start = map.getView().getCenter();
+        }
+
+        if (!end && typeof map !== 'undefined') {
+            const center = map.getView().getCenter();
+            end = [center[0] + 0.05, center[1] + 0.05];
+        }
+
+        if (!start) {
+            start = [116.397, 39.908];
+        }
+
+        if (!end) {
+            end = [116.407, 39.918];
+        }
+
+        const routePoints = [start].concat(waypoints).concat([end]);
+
+        const routeCoords = createRouteThroughPoints(routePoints);
+
+        let totalDistance = 0;
+
+        for (let i = 0; i < routePoints.length - 1; i++) {
+            totalDistance += calculateDistanceMeters(routePoints[i], routePoints[i + 1]);
+        }
+
+        // 时间故意放大一些，让“播放轨迹”慢一点
+        const duration = Math.max(1200, totalDistance / 4);
+
+        return {
+            status: '1',
+            info: 'GitHub Pages 静态折线路线',
+            route: {
+                origin: start.join(','),
+                destination: end.join(','),
+                paths: [
+                    {
+                        distance: String(Math.round(totalDistance)),
+                        duration: String(Math.round(duration)),
+                        strategy: '静态模拟折线路线',
+                        steps: [
+                            {
+                                instruction: '沿静态模拟路线行进',
+                                road: '模拟旅游路线',
+                                distance: String(Math.round(totalDistance)),
+                                duration: String(Math.round(duration)),
+                                polyline: coordsToPolyline(routeCoords)
+                            }
+                        ]
+                    }
+                ]
+            }
+        };
+    }
+
+    // 最终拦截 /api/route
+    // 这个放在 main.js 最下面，所以优先级比前面的补丁更高
+    window.fetch = function (input, init) {
+        const urlText = typeof input === 'string'
+            ? input
+            : input && input.url
+                ? input.url
+                : '';
+
+        const lowerUrl = urlText.toLowerCase();
+
+        if (lowerUrl.includes('api/route')) {
+            return makeJsonResponse(createStaticRouteResponse(urlText));
+        }
+
+        return oldFetch(input, init);
+    };
+
+    // 给可能存在的全局速度变量降速
+    window.trackPlaybackSpeed = 0.45;
+    window.trackSpeed = 0.45;
+    window.routeAnimationSpeed = 0.45;
+})();
