@@ -1,3 +1,354 @@
+// =====================================================
+// GitHub Pages 静态部署兼容补丁 V2
+// 作用：让路线规划、模拟轨迹、用户点评在 GitHub Pages 上也能运行
+// 必须放在 main.js 最上面
+// =====================================================
+(function () {
+    if (window.__githubPagesPatchInstalledV2) {
+        return;
+    }
+
+    window.__githubPagesPatchInstalledV2 = true;
+
+    // 修复旧代码调用 fixCustomAttractionData 报错
+    window.fixCustomAttractionData = function () {
+        try {
+            if (typeof supplementProvinceCityAttractions === 'function') {
+                supplementProvinceCityAttractions();
+            }
+            if (typeof normalizeAttractionCategories === 'function') {
+                normalizeAttractionCategories();
+            }
+            if (typeof normalizeAttractionProvinceCityFields === 'function') {
+                normalizeAttractionProvinceCityFields();
+            }
+            if (typeof refreshAllQueryAnalysisDropdowns === 'function') {
+                refreshAllQueryAnalysisDropdowns();
+            }
+        } catch (e) {
+            console.warn('fixCustomAttractionData 已跳过非关键错误：', e);
+        }
+    };
+
+    const originalFetch = window.fetch.bind(window);
+
+    function makeJsonResponse(data) {
+        return Promise.resolve(
+            new Response(JSON.stringify(data), {
+                status: 200,
+                headers: {
+                    'Content-Type': 'application/json; charset=utf-8'
+                }
+            })
+        );
+    }
+
+    // 从 URL 里取参数
+    function getUrlParam(urlText, key) {
+        try {
+            const query = urlText.split('?')[1] || '';
+            const params = new URLSearchParams(query);
+            return params.get(key) || '';
+        } catch (e) {
+            return '';
+        }
+    }
+
+    // 判断是不是经纬度字符串，例如 117.98,30.00
+    function parseCoordinateText(text) {
+        if (!text) return null;
+
+        text = decodeURIComponent(String(text));
+
+        const parts = text.split(',');
+        if (parts.length !== 2) {
+            return null;
+        }
+
+        const lon = parseFloat(parts[0]);
+        const lat = parseFloat(parts[1]);
+
+        if (isNaN(lon) || isNaN(lat)) {
+            return null;
+        }
+
+        return [lon, lat];
+    }
+
+    // 根据景点名称找坐标
+    function findAttractionCoordinateByName(nameText) {
+        if (!nameText || typeof attractionsSource === 'undefined' || !attractionsSource) {
+            return null;
+        }
+
+        const keyword = decodeURIComponent(String(nameText)).trim();
+
+        if (!keyword) {
+            return null;
+        }
+
+        const feature = attractionsSource.getFeatures().find(function (item) {
+            const name =
+                item.get('name') ||
+                item.get('title') ||
+                item.get('名称') ||
+                '';
+
+            return name === keyword || name.indexOf(keyword) !== -1 || keyword.indexOf(name) !== -1;
+        });
+
+        if (feature && feature.getGeometry()) {
+            return feature.getGeometry().getCoordinates();
+        }
+
+        return null;
+    }
+
+    // 把 origin / destination 变成坐标
+    function resolveRoutePoint(text) {
+        return (
+            parseCoordinateText(text) ||
+            findAttractionCoordinateByName(text) ||
+            null
+        );
+    }
+
+    // 计算两点之间的大概距离，单位米
+    function calculateDistanceMeters(coord1, coord2) {
+        if (typeof ol !== 'undefined' && ol.sphere && ol.sphere.getDistance) {
+            return ol.sphere.getDistance(coord1, coord2);
+        }
+
+        const dx = coord1[0] - coord2[0];
+        const dy = coord1[1] - coord2[1];
+        return Math.sqrt(dx * dx + dy * dy) * 111000;
+    }
+
+    // 生成一条稍微弯曲的模拟路线
+    function createMockRouteCoords(start, end, offsetRate) {
+        offsetRate = offsetRate || 0;
+
+        const coords = [];
+        const count = 24;
+
+        const dx = end[0] - start[0];
+        const dy = end[1] - start[1];
+
+        for (let i = 0; i <= count; i++) {
+            const t = i / count;
+
+            let lon = start[0] + dx * t;
+            let lat = start[1] + dy * t;
+
+            // 让线稍微弯一点，看起来不像完全直线
+            const curve = Math.sin(Math.PI * t) * 0.08;
+            lon += -dy * curve + offsetRate;
+            lat += dx * curve + offsetRate;
+
+            coords.push([Number(lon.toFixed(6)), Number(lat.toFixed(6))]);
+        }
+
+        return coords;
+    }
+
+    // 把坐标数组转成高德路线接口常见的 polyline 格式
+    function coordsToPolyline(coords) {
+        return coords.map(function (coord) {
+            return coord[0] + ',' + coord[1];
+        }).join(';');
+    }
+
+    // 生成模拟路线接口返回值
+    function createMockRouteResponse(urlText) {
+        const originText = getUrlParam(urlText, 'origin');
+        const destinationText = getUrlParam(urlText, 'destination');
+
+        let start = resolveRoutePoint(originText);
+        let end = resolveRoutePoint(destinationText);
+
+        // 如果实在解析不到，就用当前地图中心兜底
+        if (!start && typeof map !== 'undefined') {
+            start = map.getView().getCenter();
+        }
+
+        if (!end && typeof map !== 'undefined') {
+            const center = map.getView().getCenter();
+            end = [center[0] + 0.05, center[1] + 0.05];
+        }
+
+        if (!start || !end) {
+            start = [116.397, 39.908];
+            end = [116.407, 39.918];
+        }
+
+        const distance = calculateDistanceMeters(start, end);
+        const duration = Math.max(600, distance / 8);
+
+        const mainCoords = createMockRouteCoords(start, end, 0);
+        const altCoords = createMockRouteCoords(start, end, 0.015);
+
+        return {
+            status: '1',
+            info: 'GitHub Pages 静态模拟路线',
+            route: {
+                paths: [
+                    {
+                        distance: String(Math.round(distance)),
+                        duration: String(Math.round(duration)),
+                        steps: [
+                            {
+                                road: '模拟推荐路线',
+                                polyline: coordsToPolyline(mainCoords),
+                                traffic_status: 1
+                            }
+                        ]
+                    },
+                    {
+                        distance: String(Math.round(distance * 1.18)),
+                        duration: String(Math.round(duration * 1.25)),
+                        steps: [
+                            {
+                                road: '模拟备选路线',
+                                polyline: coordsToPolyline(altCoords),
+                                traffic_status: 2
+                            }
+                        ]
+                    }
+                ]
+            }
+        };
+    }
+
+    // 根据景点名生成本地模拟点评
+    function createMockPoiDetailResponse(urlText) {
+        const name = decodeURIComponent(getUrlParam(urlText, 'name') || '该景点');
+
+        const reviews = [
+            {
+                user: '游客A',
+                date: '2026-06-01',
+                rating: 5,
+                content: name + '景色很有特色，适合拍照和文化体验。'
+            },
+            {
+                user: '游客B',
+                date: '2026-05-18',
+                rating: 4,
+                content: '整体游览体验不错，路线安排合理会更轻松。'
+            },
+            {
+                user: '游客C',
+                date: '2026-05-03',
+                rating: 5,
+                content: '文旅资源丰富，适合加入主题游览路线。'
+            }
+        ];
+
+        return {
+            success: true,
+            status: '1',
+            name: name,
+            avgRating: '4.8',
+            total: reviews.length,
+            source: '本地模拟数据',
+            reviews: reviews,
+            data: {
+                name: name,
+                reviews: reviews
+            }
+        };
+    }
+
+    window.fetch = function (input, init) {
+        const urlText = typeof input === 'string'
+            ? input
+            : input && input.url
+                ? input.url
+                : '';
+
+        const lowerUrl = urlText.toLowerCase();
+
+        // 路线规划接口：路线规划和模拟轨迹都会用到它
+        if (lowerUrl.includes('api/route')) {
+            return makeJsonResponse(createMockRouteResponse(urlText));
+        }
+
+        // 用户点评 / POI 详情接口
+        if (lowerUrl.includes('api/poi/detail')) {
+            return makeJsonResponse(createMockPoiDetailResponse(urlText));
+        }
+
+        // 收藏状态检查接口：改成本地收藏夹检查
+        if (lowerUrl.includes('api/favorites/check')) {
+            let attractionId = '';
+
+            try {
+                const query = urlText.split('?')[1] || '';
+                const params = new URLSearchParams(query);
+                attractionId = params.get('id') || params.get('attractionId') || params.get('name') || '';
+            } catch (e) {
+                attractionId = '';
+            }
+
+            let isFav = false;
+
+            try {
+                const favorites = JSON.parse(localStorage.getItem('zhiyou_mingcheng_favorites_final') || '[]');
+                isFav = favorites.some(function (item) {
+                    return String(item.id) === String(attractionId) || String(item.name) === String(attractionId);
+                });
+            } catch (e) {
+                isFav = false;
+            }
+
+            return makeJsonResponse({
+                success: true,
+                isFavorite: isFav,
+                favorite: isFav
+            });
+        }
+
+        // 天气接口：静态模拟
+        if (lowerUrl.includes('api/weather')) {
+            return makeJsonResponse({
+                success: true,
+                weather: '晴',
+                temperature: '25℃',
+                humidity: '60%',
+                wind: '微风',
+                description: '当前为 GitHub Pages 静态展示数据',
+                data: {
+                    weather: '晴',
+                    temperature: '25℃',
+                    humidity: '60%',
+                    wind: '微风'
+                }
+            });
+        }
+
+        // 空气质量接口：静态模拟
+        if (lowerUrl.includes('api/airquality')) {
+            return makeJsonResponse({
+                success: true,
+                aqi: 68,
+                quality: '良',
+                pm25: 35,
+                pm10: 58,
+                description: '当前为 GitHub Pages 静态展示数据',
+                data: {
+                    aqi: 68,
+                    quality: '良',
+                    pm25: 35,
+                    pm10: 58
+                }
+            });
+        }
+
+        // 其他正常文件照常加载，例如 data/attractions.geojson
+        return originalFetch(input, init);
+    };
+})();
+
 let currentSelectedFeature = null;
 window.currentSelectedFeature = null;
 window.lastAirQualityParams = null;
@@ -3257,7 +3608,7 @@ attractionsLayer.setZIndex(100);
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    changeLanguage(window.currentLang || 'zh-CN');
+    // changeLanguage('zh');
 });
 
 // 自定义全屏按钮：让整个页面进入全屏
@@ -8959,4 +9310,23 @@ function locateFavoriteAttraction(attractionId) {
             dragging: false
         });
     }, 300);
+}
+
+// 兼容线上部署：修复旧代码中调用 fixCustomAttractionData 报错的问题
+function fixCustomAttractionData() {
+    if (typeof supplementProvinceCityAttractions === 'function') {
+        supplementProvinceCityAttractions();
+    }
+
+    if (typeof normalizeAttractionCategories === 'function') {
+        normalizeAttractionCategories();
+    }
+
+    if (typeof normalizeAttractionProvinceCityFields === 'function') {
+        normalizeAttractionProvinceCityFields();
+    }
+
+    if (typeof refreshAllQueryAnalysisDropdowns === 'function') {
+        refreshAllQueryAnalysisDropdowns();
+    }
 }
