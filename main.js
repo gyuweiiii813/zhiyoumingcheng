@@ -4726,7 +4726,7 @@ polygonSelectMoveKey = map.on('pointermove', function(evt) {
 }
     };
 
-    map.getViewport().addEventListener('contextmenu', polygonSelectRightClickHandler);
+    map.getViewport().addEventListener('contextmenu', polygonSelectRightClickHandler, false);
 
 
 // ===== 圆选查询：第一次左键单击确定圆心，第二次左键单击确认范围 =====
