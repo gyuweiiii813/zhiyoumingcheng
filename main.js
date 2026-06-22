@@ -4549,6 +4549,7 @@ let polygonSelectFeature = null;
 let polygonSelectClickKey = null;
 let polygonSelectMoveKey = null;
 let polygonSelectRightClickHandler = null;
+let polygonSelectContextMenuBlocker = null;
 
 // 清除多边形查询事件监听
 function clearPolygonSelectListeners() {
@@ -4563,9 +4564,14 @@ function clearPolygonSelectListeners() {
     }
 
     if (polygonSelectRightClickHandler) {
-        map.getViewport().removeEventListener('contextmenu', polygonSelectRightClickHandler);
-        polygonSelectRightClickHandler = null;
-    }
+    map.getViewport().removeEventListener('contextmenu', polygonSelectRightClickHandler, true);
+    polygonSelectRightClickHandler = null;
+}
+
+if (polygonSelectContextMenuBlocker) {
+    document.removeEventListener('contextmenu', polygonSelectContextMenuBlocker, true);
+    polygonSelectContextMenuBlocker = null;
+}
 
     polygonSelectPoints = [];
     polygonSelectFeature = null;
@@ -4685,8 +4691,14 @@ polygonSelectMoveKey = map.on('pointermove', function(evt) {
 
     // 右键单击：确认多边形并执行查询
     polygonSelectRightClickHandler = function(event) {
+        if (event) {
         event.preventDefault();
         event.stopPropagation();
+
+        if (typeof event.stopImmediatePropagation === 'function') {
+            event.stopImmediatePropagation();
+        }
+    }
 
         if (polygonSelectPoints.length < 3) {
             alert('多边形至少需要 3 个顶点，请继续用左键添加点。');
@@ -4726,7 +4738,17 @@ polygonSelectMoveKey = map.on('pointermove', function(evt) {
 }
     };
 
-    map.getViewport().addEventListener('contextmenu', polygonSelectRightClickHandler, false);
+    polygonSelectContextMenuBlocker = function(event) {
+    const target = event.target;
+
+    if (!target || !target.closest || !target.closest('#map')) {
+        return;
+    }
+
+    polygonSelectRightClickHandler(event);
+};
+
+document.addEventListener('contextmenu', polygonSelectContextMenuBlocker, true);
 
 
 // ===== 圆选查询：第一次左键单击确定圆心，第二次左键单击确认范围 =====
