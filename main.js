@@ -12455,18 +12455,19 @@ renderWeatherPanelStable(feature, data);
     // 用 CSS !important 抵消旧代码里的 panel.style.display = 'none'
     const style = document.createElement('style');
     style.innerHTML = `
-        #weatherPanel.weather-lock-active {
-            display: block !important;
-            visibility: visible !important;
-            opacity: 1 !important;
-        }
+    #weatherPanel.weather-lock-hidden {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+    }
 
-        #weatherPanel.weather-lock-hidden {
-            display: none !important;
-            visibility: hidden !important;
-            opacity: 0 !important;
-        }
-    `;
+    #weatherPanel.weather-lock-active,
+    #weatherPanel.weather-lock-active.weather-lock-hidden {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+`;
     document.head.appendChild(style);
 
     function getPanel() {
@@ -12626,6 +12627,9 @@ renderWeatherPanelStable(feature, data);
 
         panel.classList.remove('weather-lock-hidden');
         panel.classList.add('weather-lock-active');
+        panel.style.setProperty('display', 'block', 'important');
+panel.style.setProperty('visibility', 'visible', 'important');
+panel.style.setProperty('opacity', '1', 'important');
 
         panel.style.position = 'absolute';
         panel.style.left = '315px';
@@ -12700,13 +12704,17 @@ renderWeatherPanelStable(feature, data);
     }
 
     function lockPanelVisible() {
-        if (!weatherLockActive) return;
+    if (!weatherLockActive) return;
 
-        const panel = getPanel();
+    const panel = getPanel();
 
-        panel.classList.remove('weather-lock-hidden');
-        panel.classList.add('weather-lock-active');
-    }
+    panel.classList.remove('weather-lock-hidden');
+    panel.classList.add('weather-lock-active');
+
+    panel.style.setProperty('display', 'block', 'important');
+    panel.style.setProperty('visibility', 'visible', 'important');
+    panel.style.setProperty('opacity', '1', 'important');
+}
 
     function closeWeatherPanelFinal() {
         weatherLockActive = false;
