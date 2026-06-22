@@ -11968,6 +11968,19 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
     }
 
     window.__lightAmapWeatherInstalled = true;
+    // 天气框显示锁：点击景点后防止旧代码把天气框隐藏
+if (!document.getElementById('weatherPanelLightLockStyle')) {
+    const weatherLockStyle = document.createElement('style');
+    weatherLockStyle.id = 'weatherPanelLightLockStyle';
+    weatherLockStyle.innerHTML = `
+        #weatherPanel.light-weather-active {
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+        }
+    `;
+    document.head.appendChild(weatherLockStyle);
+}
 
     let weatherToken = 0;
     const weatherCache = {};
@@ -12093,8 +12106,12 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
 
         const panel = getPanel();
 
-        panel.style.display = 'block';
-        panel.style.position = 'absolute';
+panel.classList.add('light-weather-active');
+panel.style.display = 'block';
+panel.style.visibility = 'visible';
+panel.style.opacity = '1';
+
+panel.style.position = 'absolute';
         panel.style.left = '315px';
         panel.style.top = '185px';
         panel.style.zIndex = '9999';
@@ -12162,10 +12179,13 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
     }
 
     window.closeStaticWeatherPanel = function () {
-        const panel = getPanel();
-        panel.style.display = 'none';
-        weatherToken++;
-    };
+    const panel = getPanel();
+
+    panel.classList.remove('light-weather-active');
+    panel.style.display = 'none';
+
+    weatherToken++;
+};
 
     function queryWeather(feature) {
         const token = ++weatherToken;
@@ -12266,7 +12286,8 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
     }
 
     const panel = getPanel();
-    panel.style.display = 'none';
+panel.classList.remove('light-weather-active');
+panel.style.display = 'none';
 
     setTimeout(bindClick, 800);
 })();
