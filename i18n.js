@@ -261,8 +261,11 @@ function changeLanguage(lang) {
 }
 
 function updateAllTranslations() {
-    document.getElementById('langDropdown').textContent = translations[currentLang].language;
-    
+
+    const el = document.getElementById('xxx');
+    if (el) {
+    el.textContent = translations[currentLang].language;
+    }
     const navMapTools = document.querySelector('a[data-bs-target="#toolbar"]');
     if (navMapTools) navMapTools.textContent = t('nav.mapTools');
     
