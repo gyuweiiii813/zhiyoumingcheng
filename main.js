@@ -9332,274 +9332,374 @@ function fixCustomAttractionData() {
 }
 
 // =====================================================
-// GitHub Pages 静态部署版：天气、空气质量、人流量显示修复
-// 作用：不再依赖 server.js 的 /api/weather 和 /api/airquality
-// 请放在 main.js 最下面
+// GitHub Pages 最终版：强制修复天气 / 空气质量 / 人流量面板
+// 放在 main.js 最下面
 // =====================================================
-
-// 根据经纬度生成一个稳定的模拟数值
-function getStaticNumberByCoord(lon, lat, min, max) {
-    lon = Number(lon) || 0;
-    lat = Number(lat) || 0;
-
-    const seed = Math.abs(Math.sin(lon * 12.9898 + lat * 78.233) * 10000);
-    const ratio = seed - Math.floor(seed);
-
-    return Math.round(min + ratio * (max - min));
-}
-
-// GitHub Pages 版天气数据
-function getStaticWeatherData(lon, lat) {
-    const temp = getStaticNumberByCoord(lon, lat, 18, 31);
-    const humidity = getStaticNumberByCoord(lon, lat, 45, 82);
-    const aqi = getStaticNumberByCoord(lon, lat, 35, 95);
-    const windSpeed = getStaticNumberByCoord(lon, lat, 1, 4);
-
-    const conditions = [
-        { icon: '☀️', condition: '晴' },
-        { icon: '⛅', condition: '多云' },
-        { icon: '🌤️', condition: '晴间多云' },
-        { icon: '🌥️', condition: '阴' }
-    ];
-
-    const index = getStaticNumberByCoord(lon, lat, 0, conditions.length - 1);
-    const item = conditions[index];
-
-    return {
-        icon: item.icon,
-        temp: temp,
-        humidity: humidity,
-        aqi: aqi,
-        condition: item.condition,
-        windDir: '东南',
-        windSpeed: windSpeed,
-        timestamp: new Date().toISOString()
-    };
-}
-
-// 覆盖原来的 loadWeather
-// 原来的 loadWeather 会请求 /api/weather，GitHub Pages 不能用
-function loadWeather(lon, lat) {
-    const data = getStaticWeatherData(lon, lat);
-    window.lastWeatherData = data;
-
-    const panel = document.getElementById('weatherPanel');
-    if (panel) {
-        panel.style.display = 'block';
-    }
-
-    const weatherIcon = document.getElementById('weatherIcon');
-    const weatherTemp = document.getElementById('weatherTemp');
-    const weatherHumidity = document.getElementById('weatherHumidity');
-    const weatherAqi = document.getElementById('weatherAqi');
-    const weatherCondition = document.getElementById('weatherCondition');
-    const weatherWind = document.getElementById('weatherWind');
-
-    if (weatherIcon) {
-        weatherIcon.textContent = data.icon;
-    }
-
-    if (weatherTemp) {
-        weatherTemp.textContent = data.temp;
-    }
-
-    if (weatherHumidity) {
-        weatherHumidity.textContent = data.humidity;
-    }
-
-    if (weatherAqi) {
-        weatherAqi.textContent = data.aqi;
-    }
-
-    if (weatherCondition) {
-        weatherCondition.textContent = data.condition + ' · 静态展示数据';
-    }
-
-    if (weatherWind) {
-        weatherWind.textContent = data.windDir + ' ' + data.windSpeed + '级';
-    }
-}
-
-// GitHub Pages 版空气质量和人流量数据
-function getStaticAirQualityData(lon, lat, name) {
-    const aqi = getStaticNumberByCoord(lon, lat, 35, 110);
-    const pm25 = getStaticNumberByCoord(lon, lat, 15, 65);
-    const pm10 = getStaticNumberByCoord(lon, lat, 30, 120);
-    const so2 = getStaticNumberByCoord(lon, lat, 5, 30);
-    const no2 = getStaticNumberByCoord(lon, lat, 10, 55);
-    const co = (getStaticNumberByCoord(lon, lat, 4, 12) / 10).toFixed(1);
-    const o3 = getStaticNumberByCoord(lon, lat, 60, 150);
-
-    let level = '良';
-    let color = '#67c23a';
-    let advice = '空气质量较好，适合户外游览。';
-
-    if (aqi <= 50) {
-        level = '优';
-        color = '#2ecc71';
-        advice = '空气质量优秀，非常适合游览。';
-    } else if (aqi <= 100) {
-        level = '良';
-        color = '#f1c40f';
-        advice = '空气质量良好，适合正常游览。';
-    } else {
-        level = '轻度污染';
-        color = '#e67e22';
-        advice = '空气质量一般，建议适当减少长时间户外活动。';
-    }
-
-    const crowdLevel = getStaticNumberByCoord(lon, lat, 25, 88);
-
-    let crowdStatus = '舒适';
-    let crowdColor = '#2ecc71';
-    let crowdAdvice = '当前人流量较少，适合游览。';
-
-    if (crowdLevel < 40) {
-        crowdStatus = '舒适';
-        crowdColor = '#2ecc71';
-        crowdAdvice = '当前人流量较少，适合游览。';
-    } else if (crowdLevel < 65) {
-        crowdStatus = '适中';
-        crowdColor = '#f1c40f';
-        crowdAdvice = '当前人流量适中，游览体验较好。';
-    } else if (crowdLevel < 82) {
-        crowdStatus = '拥挤';
-        crowdColor = '#e67e22';
-        crowdAdvice = '当前游客较多，建议错峰游览。';
-    } else {
-        crowdStatus = '爆满';
-        crowdColor = '#e74c3c';
-        crowdAdvice = '当前人流量较大，建议更换游览时间。';
-    }
-
-    return {
-        aqi: aqi,
-        level: level,
-        color: color,
-        advice: advice,
-        pollutants: ['PM2.5', 'PM10'],
-        pm25: pm25,
-        pm10: pm10,
-        so2: so2,
-        no2: no2,
-        co: co,
-        o3: o3,
-        crowdLevel: crowdLevel,
-        crowdStatus: crowdStatus,
-        crowdColor: crowdColor,
-        crowdAdvice: crowdAdvice,
-        timestamp: new Date().toISOString(),
-        name: name || '当前景点'
-    };
-}
-
-// 覆盖原来的 queryAirQuality
-// 原来的 queryAirQuality 会请求 /api/airquality，GitHub Pages 不能用
-function queryAirQuality(lon, lat, name) {
-    window.lastAirQualityParams = {
-        lon: lon,
-        lat: lat,
-        name: name
-    };
-
-    const resultDiv = document.getElementById('airQualityResult');
-
-    if (!resultDiv) {
+(function () {
+    if (window.__finalStaticWeatherPanelInstalled) {
         return;
     }
 
-    const data = getStaticAirQualityData(lon, lat, name);
-    const aqiTextColor = data.aqi > 100 ? '#fff' : '#333';
+    window.__finalStaticWeatherPanelInstalled = true;
 
-    resultDiv.innerHTML = `
-        <div class="air-quality-result">
-            <div class="aqi-header" style="background: ${data.color}; color: ${aqiTextColor};">
+    let staticWeatherTimer = null;
+
+    function getNumberByCoord(lon, lat, min, max) {
+        lon = Number(lon) || 116.397;
+        lat = Number(lat) || 39.908;
+
+        const seed = Math.abs(Math.sin(lon * 12.9898 + lat * 78.233) * 10000);
+        const ratio = seed - Math.floor(seed);
+
+        return Math.round(min + ratio * (max - min));
+    }
+
+    function getStaticWeatherAirCrowd(lon, lat, name) {
+        const temp = getNumberByCoord(lon, lat, 18, 31);
+        const humidity = getNumberByCoord(lon, lat, 45, 82);
+        const aqi = getNumberByCoord(lon, lat, 35, 105);
+        const pm25 = getNumberByCoord(lon, lat, 12, 65);
+        const pm10 = getNumberByCoord(lon, lat, 28, 118);
+        const crowd = getNumberByCoord(lon, lat, 25, 88);
+
+        const weatherList = [
+            { icon: '☀️', text: '晴' },
+            { icon: '⛅', text: '多云' },
+            { icon: '🌤️', text: '晴间多云' },
+            { icon: '🌥️', text: '阴' }
+        ];
+
+        const weather = weatherList[getNumberByCoord(lon, lat, 0, weatherList.length - 1)];
+
+        let airLevel = '良';
+        let airColor = '#f1c40f';
+        let airAdvice = '空气质量良好，适合正常游览。';
+
+        if (aqi <= 50) {
+            airLevel = '优';
+            airColor = '#2ecc71';
+            airAdvice = '空气质量优秀，非常适合户外游览。';
+        } else if (aqi <= 100) {
+            airLevel = '良';
+            airColor = '#f1c40f';
+            airAdvice = '空气质量良好，适合正常游览。';
+        } else {
+            airLevel = '轻度污染';
+            airColor = '#e67e22';
+            airAdvice = '空气质量一般，建议适当减少长时间户外活动。';
+        }
+
+        let crowdLevel = '舒适';
+        let crowdColor = '#2ecc71';
+        let crowdAdvice = '当前人流量较少，适合游览。';
+
+        if (crowd < 40) {
+            crowdLevel = '舒适';
+            crowdColor = '#2ecc71';
+            crowdAdvice = '当前人流量较少，适合游览。';
+        } else if (crowd < 65) {
+            crowdLevel = '适中';
+            crowdColor = '#f1c40f';
+            crowdAdvice = '当前人流量适中，游览体验较好。';
+        } else if (crowd < 82) {
+            crowdLevel = '拥挤';
+            crowdColor = '#e67e22';
+            crowdAdvice = '游客较多，建议错峰游览。';
+        } else {
+            crowdLevel = '爆满';
+            crowdColor = '#e74c3c';
+            crowdAdvice = '当前人流量较大，建议更换游览时间。';
+        }
+
+        return {
+            name: name || '当前景点',
+            lon: lon,
+            lat: lat,
+            icon: weather.icon,
+            weather: weather.text,
+            temp: temp,
+            humidity: humidity,
+            aqi: aqi,
+            pm25: pm25,
+            pm10: pm10,
+            airLevel: airLevel,
+            airColor: airColor,
+            airAdvice: airAdvice,
+            crowd: crowd,
+            crowdLevel: crowdLevel,
+            crowdColor: crowdColor,
+            crowdAdvice: crowdAdvice,
+            time: new Date().toLocaleString('zh-CN')
+        };
+    }
+
+    function findWeatherPanel() {
+        let panel =
+            document.getElementById('weatherPanel') ||
+            document.getElementById('weatherInfo') ||
+            document.querySelector('.weather-panel') ||
+            document.querySelector('.weather-card') ||
+            document.querySelector('[class*="weather"]');
+
+        // 如果原页面找不到天气框，就新建一个
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.id = 'weatherPanel';
+            document.body.appendChild(panel);
+        }
+
+        panel.style.display = 'block';
+        panel.style.position = 'absolute';
+        panel.style.left = '315px';
+        panel.style.top = '185px';
+        panel.style.zIndex = '9999';
+        panel.style.width = '190px';
+        panel.style.background = 'linear-gradient(135deg, #5b6ee1, #7d4ac7)';
+        panel.style.borderRadius = '8px';
+        panel.style.boxShadow = '0 4px 14px rgba(0,0,0,0.25)';
+        panel.style.color = '#fff';
+        panel.style.fontSize = '12px';
+        panel.style.overflow = 'hidden';
+
+        return panel;
+    }
+
+    function renderStaticWeatherPanel(lon, lat, name) {
+        const data = getStaticWeatherAirCrowd(lon, lat, name);
+        window.__lastStaticWeatherData = data;
+
+        const panel = findWeatherPanel();
+
+        panel.innerHTML = `
+            <div style="padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.25);">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <div style="font-size:18px;">${data.icon}</div>
+                    <div style="text-align:right;">
+                        <div style="font-size:16px;font-weight:bold;">${data.temp}℃</div>
+                        <div style="font-size:11px;">${data.weather}</div>
+                    </div>
+                </div>
+                <div style="margin-top:4px;font-size:11px;opacity:0.9;">
+                    ${data.name}
+                </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;text-align:center;padding:6px 4px;border-bottom:1px solid rgba(255,255,255,0.2);">
                 <div>
-                    <div>${data.name} 空气质量</div>
+                    <div>💧</div>
+                    <div>${data.humidity}%</div>
+                </div>
+                <div>
+                    <div>🌫️</div>
                     <div>AQI ${data.aqi}</div>
                 </div>
                 <div>
-                    <div>${data.level}</div>
-                    <div>${data.pollutants.join('、')}</div>
+                    <div>👥</div>
+                    <div>${data.crowd}%</div>
                 </div>
             </div>
 
-            <div class="aqi-advice" style="border-left-color: ${data.color};">
-                💡 ${data.advice}
-            </div>
-
-            <div class="crowd-section" style="border-color: ${data.crowdColor};">
-                <div>
-                    <div>人流量</div>
-                    <div style="color: ${data.crowdColor};">${data.crowdLevel}%</div>
-                </div>
-                <div>
-                    <div style="color: ${data.crowdColor};">${data.crowdStatus}</div>
-                    <div>${data.crowdAdvice}</div>
-                </div>
-            </div>
-
-            <div class="aqi-details">
-                <div class="pollutant-item">
-                    <div>PM2.5</div>
-                    <div class="${data.pm25 > 75 ? 'bad' : 'good'}">${data.pm25} μg/m³</div>
+            <div style="background:rgba(255,255,255,0.92);color:#333;padding:8px 10px;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+                    <span>空气质量</span>
+                    <span style="color:${data.airColor};font-weight:bold;">${data.airLevel}</span>
                 </div>
 
-                <div class="pollutant-item">
-                    <div>PM10</div>
-                    <div class="${data.pm10 > 150 ? 'bad' : 'good'}">${data.pm10} μg/m³</div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+                    <span>人流量</span>
+                    <span style="color:${data.crowdColor};font-weight:bold;">${data.crowdLevel}</span>
                 </div>
 
-                <div class="pollutant-item">
-                    <div>SO₂</div>
-                    <div class="${data.so2 > 60 ? 'bad' : 'good'}">${data.so2} μg/m³</div>
+                <div style="font-size:11px;color:#555;line-height:1.5;">
+                    ${data.airAdvice}<br>
+                    ${data.crowdAdvice}
                 </div>
 
-                <div class="pollutant-item">
-                    <div>NO₂</div>
-                    <div class="${data.no2 > 80 ? 'bad' : 'good'}">${data.no2} μg/m³</div>
-                </div>
-
-                <div class="pollutant-item">
-                    <div>CO</div>
-                    <div class="${Number(data.co) > 4 ? 'bad' : 'good'}">${data.co} mg/m³</div>
-                </div>
-
-                <div class="pollutant-item">
-                    <div>O₃</div>
-                    <div class="${data.o3 > 180 ? 'bad' : 'good'}">${data.o3} μg/m³</div>
+                <div style="font-size:10px;color:#999;margin-top:6px;text-align:right;">
+                    静态演示数据
                 </div>
             </div>
+        `;
 
-            <div style="font-size: 0.65rem; color: #666; text-align: right; margin-top: 6px;">
-                数据更新时间：${new Date(data.timestamp).toLocaleString('zh-CN')}
-            </div>
-        </div>
-    `;
-}
+        return data;
+    }
 
-// 覆盖实时更新函数，让线上版也能稳定刷新天气、人流量、空气质量
-function startRealTimeUpdate(lon, lat, name) {
-    stopRealTimeUpdate();
+    function getFeatureName(feature) {
+        if (!feature) return '当前景点';
 
-    currentLocationCoords = {
-        lon: lon,
-        lat: lat,
-        name: name
+        return (
+            feature.get('name') ||
+            feature.get('title') ||
+            feature.get('名称') ||
+            '当前景点'
+        );
+    }
+
+    function updateWeatherByFeature(feature) {
+        if (!feature || !feature.getGeometry()) {
+            return;
+        }
+
+        const coord = feature.getGeometry().getCoordinates();
+        const name = getFeatureName(feature);
+
+        renderStaticWeatherPanel(coord[0], coord[1], name);
+    }
+
+    // 覆盖原来的天气函数
+    window.loadWeather = function (lon, lat, name) {
+        return Promise.resolve(renderStaticWeatherPanel(lon, lat, name));
     };
 
-    loadWeather(lon, lat);
-    queryAirQuality(lon, lat, name);
+    window.loadWeatherData = function (lon, lat, name) {
+        return Promise.resolve(renderStaticWeatherPanel(lon, lat, name));
+    };
 
-    refreshTimer = setInterval(function () {
-        loadWeather(lon, lat);
-        queryAirQuality(lon, lat, name);
-    }, 30000);
-}
+    window.queryWeather = function (lon, lat, name) {
+        return Promise.resolve(renderStaticWeatherPanel(lon, lat, name));
+    };
 
-function stopRealTimeUpdate() {
-    if (refreshTimer) {
-        clearInterval(refreshTimer);
-        refreshTimer = null;
+    window.queryAirQuality = function (lon, lat, name) {
+        return Promise.resolve(renderStaticWeatherPanel(lon, lat, name));
+    };
+
+    window.loadAirQualityData = function (lon, lat, name) {
+        return Promise.resolve(renderStaticWeatherPanel(lon, lat, name));
+    };
+
+    window.startRealTimeUpdate = function (lon, lat, name) {
+        if (staticWeatherTimer) {
+            clearInterval(staticWeatherTimer);
+            staticWeatherTimer = null;
+        }
+
+        renderStaticWeatherPanel(lon, lat, name);
+
+        staticWeatherTimer = setInterval(function () {
+            renderStaticWeatherPanel(lon, lat, name);
+        }, 30000);
+    };
+
+    window.stopRealTimeUpdate = function () {
+        if (staticWeatherTimer) {
+            clearInterval(staticWeatherTimer);
+            staticWeatherTimer = null;
+        }
+    };
+
+    // 拦截 /api/weather 和 /api/airquality，防止旧代码继续显示查询失败
+    const oldFetch = window.fetch.bind(window);
+
+    window.fetch = function (input, init) {
+        const urlText = typeof input === 'string'
+            ? input
+            : input && input.url
+                ? input.url
+                : '';
+
+        const lowerUrl = urlText.toLowerCase();
+
+        if (lowerUrl.includes('api/weather') || lowerUrl.includes('api/airquality')) {
+            const data = window.__lastStaticWeatherData || getStaticWeatherAirCrowd(116.397, 39.908, '当前景点');
+
+            return Promise.resolve(
+                new Response(JSON.stringify({
+                    success: true,
+                    status: '1',
+                    icon: data.icon,
+                    temp: data.temp,
+                    temperature: data.temp,
+                    humidity: data.humidity,
+                    aqi: data.aqi,
+                    condition: data.weather,
+                    weather: data.weather,
+                    windDir: '东南',
+                    windSpeed: 2,
+                    level: data.airLevel,
+                    quality: data.airLevel,
+                    crowd: data.crowd,
+                    crowdLevel: data.crowdLevel,
+                    data: {
+                        icon: data.icon,
+                        temp: data.temp,
+                        temperature: data.temp,
+                        humidity: data.humidity,
+                        aqi: data.aqi,
+                        condition: data.weather,
+                        weather: data.weather,
+                        windDir: '东南',
+                        windSpeed: 2,
+                        level: data.airLevel,
+                        quality: data.airLevel,
+                        crowd: data.crowd,
+                        crowdLevel: data.crowdLevel
+                    }
+                }), {
+                    status: 200,
+                    headers: {
+                        'Content-Type': 'application/json; charset=utf-8'
+                    }
+                })
+            );
+        }
+
+        return oldFetch(input, init);
+    };
+
+    // 给地图点击事件补一个天气更新逻辑
+    function bindStaticWeatherToMapClick() {
+        if (typeof map === 'undefined' || !map || window.__staticWeatherMapClickBound) {
+            return;
+        }
+
+        window.__staticWeatherMapClickBound = true;
+
+        map.on('singleclick', function (evt) {
+            let clickedFeature = null;
+
+            map.forEachFeatureAtPixel(evt.pixel, function (feature) {
+                clickedFeature = feature;
+                return true;
+            });
+
+            if (clickedFeature) {
+                setTimeout(function () {
+                    updateWeatherByFeature(clickedFeature);
+                }, 300);
+
+                setTimeout(function () {
+                    updateWeatherByFeature(clickedFeature);
+                }, 1000);
+            }
+        });
     }
-}
+
+    // 页面加载后绑定地图点击
+    setTimeout(bindStaticWeatherToMapClick, 1500);
+    setTimeout(bindStaticWeatherToMapClick, 3000);
+
+    // 初始显示一个默认面板
+    setTimeout(function () {
+        if (!window.__lastStaticWeatherData) {
+            renderStaticWeatherPanel(116.397, 39.908, '点击景点查看天气');
+        }
+    }, 1200);
+
+    // 如果旧代码又写回“查询失败”，这里自动改回来
+    setInterval(function () {
+        const panel = findWeatherPanel();
+
+        if (!panel) return;
+
+        const text = panel.innerText || '';
+
+        if (
+            text.indexOf('查询失败') !== -1 ||
+            text.indexOf('稍后重试') !== -1 ||
+            text.indexOf('--') !== -1
+        ) {
+            const data = window.__lastStaticWeatherData || getStaticWeatherAirCrowd(116.397, 39.908, '点击景点查看天气');
+            renderStaticWeatherPanel(data.lon, data.lat, data.name);
+        }
+    }, 1500);
+})();
