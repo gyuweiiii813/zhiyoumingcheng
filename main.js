@@ -9330,3 +9330,276 @@ function fixCustomAttractionData() {
         refreshAllQueryAnalysisDropdowns();
     }
 }
+
+// =====================================================
+// GitHub Pages 静态部署版：天气、空气质量、人流量显示修复
+// 作用：不再依赖 server.js 的 /api/weather 和 /api/airquality
+// 请放在 main.js 最下面
+// =====================================================
+
+// 根据经纬度生成一个稳定的模拟数值
+function getStaticNumberByCoord(lon, lat, min, max) {
+    lon = Number(lon) || 0;
+    lat = Number(lat) || 0;
+
+    const seed = Math.abs(Math.sin(lon * 12.9898 + lat * 78.233) * 10000);
+    const ratio = seed - Math.floor(seed);
+
+    return Math.round(min + ratio * (max - min));
+}
+
+// GitHub Pages 版天气数据
+function getStaticWeatherData(lon, lat) {
+    const temp = getStaticNumberByCoord(lon, lat, 18, 31);
+    const humidity = getStaticNumberByCoord(lon, lat, 45, 82);
+    const aqi = getStaticNumberByCoord(lon, lat, 35, 95);
+    const windSpeed = getStaticNumberByCoord(lon, lat, 1, 4);
+
+    const conditions = [
+        { icon: '☀️', condition: '晴' },
+        { icon: '⛅', condition: '多云' },
+        { icon: '🌤️', condition: '晴间多云' },
+        { icon: '🌥️', condition: '阴' }
+    ];
+
+    const index = getStaticNumberByCoord(lon, lat, 0, conditions.length - 1);
+    const item = conditions[index];
+
+    return {
+        icon: item.icon,
+        temp: temp,
+        humidity: humidity,
+        aqi: aqi,
+        condition: item.condition,
+        windDir: '东南',
+        windSpeed: windSpeed,
+        timestamp: new Date().toISOString()
+    };
+}
+
+// 覆盖原来的 loadWeather
+// 原来的 loadWeather 会请求 /api/weather，GitHub Pages 不能用
+function loadWeather(lon, lat) {
+    const data = getStaticWeatherData(lon, lat);
+    window.lastWeatherData = data;
+
+    const panel = document.getElementById('weatherPanel');
+    if (panel) {
+        panel.style.display = 'block';
+    }
+
+    const weatherIcon = document.getElementById('weatherIcon');
+    const weatherTemp = document.getElementById('weatherTemp');
+    const weatherHumidity = document.getElementById('weatherHumidity');
+    const weatherAqi = document.getElementById('weatherAqi');
+    const weatherCondition = document.getElementById('weatherCondition');
+    const weatherWind = document.getElementById('weatherWind');
+
+    if (weatherIcon) {
+        weatherIcon.textContent = data.icon;
+    }
+
+    if (weatherTemp) {
+        weatherTemp.textContent = data.temp;
+    }
+
+    if (weatherHumidity) {
+        weatherHumidity.textContent = data.humidity;
+    }
+
+    if (weatherAqi) {
+        weatherAqi.textContent = data.aqi;
+    }
+
+    if (weatherCondition) {
+        weatherCondition.textContent = data.condition + ' · 静态展示数据';
+    }
+
+    if (weatherWind) {
+        weatherWind.textContent = data.windDir + ' ' + data.windSpeed + '级';
+    }
+}
+
+// GitHub Pages 版空气质量和人流量数据
+function getStaticAirQualityData(lon, lat, name) {
+    const aqi = getStaticNumberByCoord(lon, lat, 35, 110);
+    const pm25 = getStaticNumberByCoord(lon, lat, 15, 65);
+    const pm10 = getStaticNumberByCoord(lon, lat, 30, 120);
+    const so2 = getStaticNumberByCoord(lon, lat, 5, 30);
+    const no2 = getStaticNumberByCoord(lon, lat, 10, 55);
+    const co = (getStaticNumberByCoord(lon, lat, 4, 12) / 10).toFixed(1);
+    const o3 = getStaticNumberByCoord(lon, lat, 60, 150);
+
+    let level = '良';
+    let color = '#67c23a';
+    let advice = '空气质量较好，适合户外游览。';
+
+    if (aqi <= 50) {
+        level = '优';
+        color = '#2ecc71';
+        advice = '空气质量优秀，非常适合游览。';
+    } else if (aqi <= 100) {
+        level = '良';
+        color = '#f1c40f';
+        advice = '空气质量良好，适合正常游览。';
+    } else {
+        level = '轻度污染';
+        color = '#e67e22';
+        advice = '空气质量一般，建议适当减少长时间户外活动。';
+    }
+
+    const crowdLevel = getStaticNumberByCoord(lon, lat, 25, 88);
+
+    let crowdStatus = '舒适';
+    let crowdColor = '#2ecc71';
+    let crowdAdvice = '当前人流量较少，适合游览。';
+
+    if (crowdLevel < 40) {
+        crowdStatus = '舒适';
+        crowdColor = '#2ecc71';
+        crowdAdvice = '当前人流量较少，适合游览。';
+    } else if (crowdLevel < 65) {
+        crowdStatus = '适中';
+        crowdColor = '#f1c40f';
+        crowdAdvice = '当前人流量适中，游览体验较好。';
+    } else if (crowdLevel < 82) {
+        crowdStatus = '拥挤';
+        crowdColor = '#e67e22';
+        crowdAdvice = '当前游客较多，建议错峰游览。';
+    } else {
+        crowdStatus = '爆满';
+        crowdColor = '#e74c3c';
+        crowdAdvice = '当前人流量较大，建议更换游览时间。';
+    }
+
+    return {
+        aqi: aqi,
+        level: level,
+        color: color,
+        advice: advice,
+        pollutants: ['PM2.5', 'PM10'],
+        pm25: pm25,
+        pm10: pm10,
+        so2: so2,
+        no2: no2,
+        co: co,
+        o3: o3,
+        crowdLevel: crowdLevel,
+        crowdStatus: crowdStatus,
+        crowdColor: crowdColor,
+        crowdAdvice: crowdAdvice,
+        timestamp: new Date().toISOString(),
+        name: name || '当前景点'
+    };
+}
+
+// 覆盖原来的 queryAirQuality
+// 原来的 queryAirQuality 会请求 /api/airquality，GitHub Pages 不能用
+function queryAirQuality(lon, lat, name) {
+    window.lastAirQualityParams = {
+        lon: lon,
+        lat: lat,
+        name: name
+    };
+
+    const resultDiv = document.getElementById('airQualityResult');
+
+    if (!resultDiv) {
+        return;
+    }
+
+    const data = getStaticAirQualityData(lon, lat, name);
+    const aqiTextColor = data.aqi > 100 ? '#fff' : '#333';
+
+    resultDiv.innerHTML = `
+        <div class="air-quality-result">
+            <div class="aqi-header" style="background: ${data.color}; color: ${aqiTextColor};">
+                <div>
+                    <div>${data.name} 空气质量</div>
+                    <div>AQI ${data.aqi}</div>
+                </div>
+                <div>
+                    <div>${data.level}</div>
+                    <div>${data.pollutants.join('、')}</div>
+                </div>
+            </div>
+
+            <div class="aqi-advice" style="border-left-color: ${data.color};">
+                💡 ${data.advice}
+            </div>
+
+            <div class="crowd-section" style="border-color: ${data.crowdColor};">
+                <div>
+                    <div>人流量</div>
+                    <div style="color: ${data.crowdColor};">${data.crowdLevel}%</div>
+                </div>
+                <div>
+                    <div style="color: ${data.crowdColor};">${data.crowdStatus}</div>
+                    <div>${data.crowdAdvice}</div>
+                </div>
+            </div>
+
+            <div class="aqi-details">
+                <div class="pollutant-item">
+                    <div>PM2.5</div>
+                    <div class="${data.pm25 > 75 ? 'bad' : 'good'}">${data.pm25} μg/m³</div>
+                </div>
+
+                <div class="pollutant-item">
+                    <div>PM10</div>
+                    <div class="${data.pm10 > 150 ? 'bad' : 'good'}">${data.pm10} μg/m³</div>
+                </div>
+
+                <div class="pollutant-item">
+                    <div>SO₂</div>
+                    <div class="${data.so2 > 60 ? 'bad' : 'good'}">${data.so2} μg/m³</div>
+                </div>
+
+                <div class="pollutant-item">
+                    <div>NO₂</div>
+                    <div class="${data.no2 > 80 ? 'bad' : 'good'}">${data.no2} μg/m³</div>
+                </div>
+
+                <div class="pollutant-item">
+                    <div>CO</div>
+                    <div class="${Number(data.co) > 4 ? 'bad' : 'good'}">${data.co} mg/m³</div>
+                </div>
+
+                <div class="pollutant-item">
+                    <div>O₃</div>
+                    <div class="${data.o3 > 180 ? 'bad' : 'good'}">${data.o3} μg/m³</div>
+                </div>
+            </div>
+
+            <div style="font-size: 0.65rem; color: #666; text-align: right; margin-top: 6px;">
+                数据更新时间：${new Date(data.timestamp).toLocaleString('zh-CN')}
+            </div>
+        </div>
+    `;
+}
+
+// 覆盖实时更新函数，让线上版也能稳定刷新天气、人流量、空气质量
+function startRealTimeUpdate(lon, lat, name) {
+    stopRealTimeUpdate();
+
+    currentLocationCoords = {
+        lon: lon,
+        lat: lat,
+        name: name
+    };
+
+    loadWeather(lon, lat);
+    queryAirQuality(lon, lat, name);
+
+    refreshTimer = setInterval(function () {
+        loadWeather(lon, lat);
+        queryAirQuality(lon, lat, name);
+    }, 30000);
+}
+
+function stopRealTimeUpdate() {
+    if (refreshTimer) {
+        clearInterval(refreshTimer);
+        refreshTimer = null;
+    }
+}
