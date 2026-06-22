@@ -7290,7 +7290,6 @@ function supplementProvinceCityAttractions() {
         { name: '西递', province: '安徽', city: '黄山', category: '古建筑', coordinate: [117.993, 29.906], description: '保存较完整的徽派古村落，具有传统民居文化价值。' },
 
         // 广西
-        { name: '桂林山水', province: '广西', city: '桂林', category: '自然风光', coordinate: [110.299, 25.275], description: '桂林代表性山水景观，是自然风光旅游的重要品牌。' },
         { name: '漓江', province: '广西', city: '桂林', category: '自然风光', coordinate: [110.432, 25.148], description: '以喀斯特山水风光闻名，适合自然观光和摄影旅游。' },
         { name: '阳朔西街', province: '广西', city: '桂林', category: '文化景区', coordinate: [110.496, 24.778], description: '融合山水旅游、街区消费和地方文化体验的热门节点。' },
 
