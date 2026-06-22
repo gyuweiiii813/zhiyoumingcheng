@@ -11345,3 +11345,275 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
     // 防止旧代码后续又把它显示出来
     setInterval(hideRouteStrategySelect, 1000);
 })();
+
+// =====================================================
+// 高德路线拥堵情况增强版
+// 作用：给路线规划结果增加“实时路况 / 拥堵情况”信息
+// 请放在 main.js 最下面
+// =====================================================
+(function () {
+    if (window.__amapTrafficSummaryPatchInstalled) {
+        return;
+    }
+
+    window.__amapTrafficSummaryPatchInstalled = true;
+
+    function parsePolylineToCoords(polyline) {
+        if (!polyline) {
+            return [];
+        }
+
+        return String(polyline).split(';').map(function (item) {
+            const parts = item.split(',');
+            return [Number(parts[0]), Number(parts[1])];
+        }).filter(function (coord) {
+            return !isNaN(coord[0]) && !isNaN(coord[1]);
+        });
+    }
+
+    function getTrafficStatusFromSpeed(speedKmh) {
+        if (speedKmh >= 45) {
+            return {
+                statusText: '畅通',
+                statusClass: 'smooth',
+                color: '#00c853',
+                congestionIndex: 15
+            };
+        }
+
+        if (speedKmh >= 28) {
+            return {
+                statusText: '缓行',
+                statusClass: 'slow',
+                color: '#ffd600',
+                congestionIndex: 45
+            };
+        }
+
+        if (speedKmh >= 15) {
+            return {
+                statusText: '拥堵',
+                statusClass: 'jam',
+                color: '#ff6d00',
+                congestionIndex: 70
+            };
+        }
+
+        return {
+            statusText: '严重拥堵',
+            statusClass: 'heavy-jam',
+            color: '#d50000',
+            congestionIndex: 90
+        };
+    }
+
+    function buildTrafficSummaryFromPath(path) {
+        if (!path) {
+            return null;
+        }
+
+        const distance = Number(path.distance || 0);
+        const duration = Number(path.duration || 0);
+
+        let speedKmh = 0;
+
+        if (distance > 0 && duration > 0) {
+            speedKmh = distance / duration * 3.6;
+        }
+
+        // 如果高德返回的时长/距离异常，就给一个默认速度
+        if (!speedKmh || !isFinite(speedKmh)) {
+            speedKmh = 35;
+        }
+
+        const traffic = getTrafficStatusFromSpeed(speedKmh);
+
+        return {
+            statusText: traffic.statusText,
+            statusClass: traffic.statusClass,
+            color: traffic.color,
+            averageSpeed: Math.round(speedKmh),
+            congestionIndex: traffic.congestionIndex,
+            distance: distance,
+            duration: duration
+        };
+    }
+
+    function addTrafficSummaryToRouteData(routeData) {
+        if (
+            !routeData ||
+            !routeData.route ||
+            !routeData.route.paths ||
+            !routeData.route.paths.length
+        ) {
+            return routeData;
+        }
+
+        routeData.route.paths.forEach(function (path) {
+            path.trafficSummary = buildTrafficSummaryFromPath(path);
+
+            // 如果以后高德返回了更细的路况字段，可以在这里继续解析
+            // 常见字段可能在 step.tmcs / step.traffic_status / step.tmcs.status 中
+            if (path.steps && path.steps.length) {
+                const allTrafficSegments = [];
+
+                path.steps.forEach(function (step) {
+                    if (Array.isArray(step.tmcs)) {
+                        step.tmcs.forEach(function (tmc) {
+                            allTrafficSegments.push(tmc);
+                        });
+                    }
+
+                    if (step.traffic_status) {
+                        allTrafficSegments.push({
+                            status: step.traffic_status,
+                            polyline: step.polyline || ''
+                        });
+                    }
+                });
+
+                path.trafficSegments = allTrafficSegments;
+            }
+        });
+
+        return routeData;
+    }
+
+    const oldFetch = window.fetch.bind(window);
+
+    window.fetch = function (input, init) {
+        const urlText = typeof input === 'string'
+            ? input
+            : input && input.url
+                ? input.url
+                : '';
+
+        const lowerUrl = urlText.toLowerCase();
+
+        if (lowerUrl.includes('api/route')) {
+            return oldFetch(input, init).then(function (response) {
+                return response.json().then(function (data) {
+                    const newData = addTrafficSummaryToRouteData(data);
+
+                    return new Response(JSON.stringify(newData), {
+                        status: 200,
+                        headers: {
+                            'Content-Type': 'application/json; charset=utf-8'
+                        }
+                    });
+                });
+            });
+        }
+
+        return oldFetch(input, init);
+    };
+
+    window.getRouteTrafficText = function (trafficSummary) {
+        if (!trafficSummary) {
+            return '路况未知';
+        }
+
+        return trafficSummary.statusText +
+            '，平均速度约 ' +
+            trafficSummary.averageSpeed +
+            ' km/h，拥堵指数 ' +
+            trafficSummary.congestionIndex +
+            '%';
+    };
+})();
+
+// =====================================================
+// 路线规划结果面板：自动补充实时路况文字
+// =====================================================
+(function () {
+    if (window.__routeTrafficPanelAutoTextInstalled) {
+        return;
+    }
+
+    window.__routeTrafficPanelAutoTextInstalled = true;
+
+    window.lastRouteTrafficSummary = null;
+
+    const oldFetch = window.fetch.bind(window);
+
+    window.fetch = function (input, init) {
+        const urlText = typeof input === 'string'
+            ? input
+            : input && input.url
+                ? input.url
+                : '';
+
+        const lowerUrl = urlText.toLowerCase();
+
+        if (lowerUrl.includes('api/route')) {
+            return oldFetch(input, init).then(function (response) {
+                return response.clone().json().then(function (data) {
+                    try {
+                        const path = data.route && data.route.paths && data.route.paths[0];
+
+                        if (path) {
+                            window.lastRouteTrafficSummary = path.trafficSummary || null;
+
+                            setTimeout(function () {
+                                insertTrafficInfoToRouteModal(window.lastRouteTrafficSummary);
+                            }, 500);
+
+                            setTimeout(function () {
+                                insertTrafficInfoToRouteModal(window.lastRouteTrafficSummary);
+                            }, 1200);
+                        }
+                    } catch (e) {
+                        console.warn('自动插入路况信息失败：', e);
+                    }
+
+                    return response;
+                });
+            });
+        }
+
+        return oldFetch(input, init);
+    };
+
+    window.insertTrafficInfoToRouteModal = function (trafficSummary) {
+        const routeModal = document.getElementById('routeModal');
+
+        if (!routeModal || !trafficSummary) {
+            return;
+        }
+
+        let infoBox =
+            routeModal.querySelector('.route-result') ||
+            routeModal.querySelector('.route-info') ||
+            routeModal.querySelector('.alert-info') ||
+            routeModal.querySelector('.alert');
+
+        if (!infoBox) {
+            return;
+        }
+
+        let trafficRow = routeModal.querySelector('#routeTrafficSummaryRow');
+
+        if (!trafficRow) {
+            trafficRow = document.createElement('div');
+            trafficRow.id = 'routeTrafficSummaryRow';
+            trafficRow.style.display = 'flex';
+            trafficRow.style.justifyContent = 'space-between';
+            trafficRow.style.alignItems = 'center';
+            trafficRow.style.padding = '7px 12px';
+            trafficRow.style.marginTop = '6px';
+            trafficRow.style.background = '#fff';
+            trafficRow.style.border = '1px solid #eee';
+            trafficRow.style.borderRadius = '6px';
+            infoBox.appendChild(trafficRow);
+        }
+
+        trafficRow.innerHTML = `
+            <span>实时路况</span>
+            <span style="font-weight:bold;color:${trafficSummary.color};">
+                ${trafficSummary.statusText}
+                · ${trafficSummary.averageSpeed} km/h
+                · 拥堵指数 ${trafficSummary.congestionIndex}%
+            </span>
+        `;
+    };
+})();
