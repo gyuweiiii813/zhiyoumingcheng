@@ -4686,6 +4686,7 @@ polygonSelectMoveKey = map.on('pointermove', function(evt) {
     // 右键单击：确认多边形并执行查询
     polygonSelectRightClickHandler = function(event) {
         event.preventDefault();
+        event.stopPropagation();
 
         if (polygonSelectPoints.length < 3) {
             alert('多边形至少需要 3 个顶点，请继续用左键添加点。');
