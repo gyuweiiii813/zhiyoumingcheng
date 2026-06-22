@@ -12284,20 +12284,25 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
 })();
 
 // =====================================================
-// 景点信息框 / 天气框 自动隐藏控制
-// 功能：
-// 1. 点击景点时显示天气框和属性信息框
-// 2. 点击其他功能按钮、查询按钮、绘制按钮、路线规划等时自动隐藏
-// 3. 点击空白地图区域时也隐藏
-// 4. 再次点击景点或景点查询时重新显示
-// 请放在 main.js 最下面
+// 天气框 / 属性信息框 白名单显示控制
+// 只有这三种操作允许显示：
+// 1. 点击地图中的景点
+// 2. 景点查询 queryAttraction
+// 3. 属性查询 searchAttractionsByAttribute
+// 其他功能一律自动清除天气框和属性信息框
 // =====================================================
 (function () {
-    if (window.__attractionPanelAutoHideInstalled) {
+    if (window.__attractionPanelWhitelistControlInstalled) {
         return;
     }
 
-    window.__attractionPanelAutoHideInstalled = true;
+    window.__attractionPanelWhitelistControlInstalled = true;
+
+    window.__lastAttractionPanelAllowedTime = 0;
+
+    function markAllowedAction() {
+        window.__lastAttractionPanelAllowedTime = Date.now();
+    }
 
     function getFeatureNameSafe(feature) {
         if (!feature) return '';
@@ -12324,26 +12329,26 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
 
         const type = feature.get('type') || feature.get('drawType') || '';
 
-        // 绘制图形、路线、轨迹、空间查询图形，不算景点
-        if (
-            type === 'box_select' ||
-            type === 'circle_select' ||
-            type === 'polygon_select' ||
-            type === 'spatial_query' ||
-            type === 'route' ||
-            type === 'track' ||
-            type === 'draw' ||
-            type === 'user_draw' ||
-            type === 'measure'
-        ) {
+        if ([
+            'box_select',
+            'circle_select',
+            'polygon_select',
+            'spatial_query',
+            'route',
+            'track',
+            'draw',
+            'user_draw',
+            'measure',
+            'buffer',
+            'overlayPoint'
+        ].includes(type)) {
             return false;
         }
 
         return true;
     }
 
-    window.hideAttractionFloatingPanels = function () {
-        // 隐藏天气框
+    function hideAttractionWeatherAndInfo() {
         const weatherPanel = document.getElementById('weatherPanel');
 
         if (weatherPanel) {
@@ -12358,14 +12363,6 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
             weatherPanel.style.opacity = '0';
         }
 
-        // 停止旧天气实时刷新，避免它又把天气框拉出来
-        if (typeof stopRealTimeUpdate === 'function') {
-            try {
-                stopRealTimeUpdate();
-            } catch (e) {}
-        }
-
-        // 隐藏属性信息框
         const featureInfo = document.getElementById('featureInfo');
 
         if (featureInfo) {
@@ -12373,136 +12370,88 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
             featureInfo.style.display = 'none';
         }
 
+        const infoPanel = document.getElementById('infoPanel');
+
+        if (infoPanel) {
+            infoPanel.classList.remove('show');
+            infoPanel.style.display = 'none';
+        }
+
         currentSelectedFeature = null;
         window.currentSelectedFeature = null;
-    };
+    }
 
-    window.showAttractionFloatingPanels = function (feature) {
+    function showAttractionInfoPanel() {
         const featureInfo = document.getElementById('featureInfo');
 
         if (featureInfo) {
             featureInfo.style.display = 'block';
         }
 
-        const weatherPanel = document.getElementById('weatherPanel');
+        const infoPanel = document.getElementById('infoPanel');
 
-        if (weatherPanel) {
-            weatherPanel.style.visibility = 'visible';
-            weatherPanel.style.opacity = '1';
+        if (infoPanel) {
+            infoPanel.style.display = 'block';
+            infoPanel.classList.add('show');
         }
+    }
 
-        // 如果你已经加了“高德天气最终清理版”，这里会重新显示天气
+    function showAllowedAttractionPanels(feature) {
+        markAllowedAction();
+
+        showAttractionInfoPanel();
+
         if (
             feature &&
             typeof window.showCleanAmapWeatherForFeature === 'function'
         ) {
             window.showCleanAmapWeatherForFeature(feature);
         }
-    };
+    }
 
-    // 1. 点击地图空白处，隐藏两个框；点击景点，不隐藏
+    window.hideAttractionWeatherAndInfo = hideAttractionWeatherAndInfo;
+    window.showAllowedAttractionPanels = showAllowedAttractionPanels;
+
+    // 1. 地图点击：只有点到真正景点才允许显示；点空白或其他图形就清除
     if (typeof map !== 'undefined' && map) {
         map.on('singleclick', function (evt) {
             setTimeout(function () {
-                let clickedFeature = null;
+                let clickedAttraction = null;
 
                 map.forEachFeatureAtPixel(evt.pixel, function (feature) {
                     if (isAttractionFeature(feature)) {
-                        clickedFeature = feature;
+                        clickedAttraction = feature;
                         return true;
                     }
 
                     return false;
                 });
 
-                if (clickedFeature) {
-                    window.showAttractionFloatingPanels(clickedFeature);
+                if (clickedAttraction) {
+                    showAllowedAttractionPanels(clickedAttraction);
                 } else {
-                    window.hideAttractionFloatingPanels();
+                    hideAttractionWeatherAndInfo();
                 }
-            }, 30);
+            }, 80);
         });
     }
 
-    // 2. 点击页面上的其他功能按钮、下拉框、菜单时，隐藏两个框
-    document.addEventListener('click', function (event) {
-        const target = event.target;
-
-        if (!target) {
-            return;
-        }
-
-        // 点天气框内部，不隐藏
-        if (target.closest('#weatherPanel')) {
-            return;
-        }
-
-        // 点属性信息框内部，例如收藏按钮、点评内容，不隐藏
-        if (target.closest('#featureInfo')) {
-            return;
-        }
-
-        // 点地图本体，不在这里处理，交给 map.singleclick 判断
-        if (target.closest('#map')) {
-            return;
-        }
-
-        // 点 OpenLayers 控件，例如缩放按钮，不强制处理
-        if (target.closest('.ol-control')) {
-            return;
-        }
-
-        // 这些都算“其他功能”
-        const isFunctionClick =
-            target.closest('button') ||
-            target.closest('a') ||
-            target.closest('select') ||
-            target.closest('input') ||
-            target.closest('.dropdown-item') ||
-            target.closest('.tool-btn') ||
-            target.closest('.btn') ||
-            target.closest('.nav-link');
-
-        if (isFunctionClick) {
-            window.hideAttractionFloatingPanels();
-        }
-    }, true);
-
-    // 3. 下拉框选择变化时也隐藏，例如路线规划、分析类型、推荐方式
-    document.addEventListener('change', function (event) {
-        const target = event.target;
-
-        if (!target) {
-            return;
-        }
-
-        if (
-            target.closest('#weatherPanel') ||
-            target.closest('#featureInfo')
-        ) {
-            return;
-        }
-
-        if (
-            target.tagName === 'SELECT' ||
-            target.tagName === 'INPUT'
-        ) {
-            window.hideAttractionFloatingPanels();
-        }
-    }, true);
-
-    // 4. 兼容右侧“景点查询”下拉菜单：queryAttraction 后重新显示属性框和天气框
+    // 2. 景点查询 queryAttraction：允许显示
     if (typeof window.queryAttraction === 'function') {
         const oldQueryAttraction = window.queryAttraction;
 
         window.queryAttraction = function (id) {
+            markAllowedAction();
+
             const result = oldQueryAttraction.apply(this, arguments);
 
             setTimeout(function () {
                 if (!id) {
-                    window.hideAttractionFloatingPanels();
+                    hideAttractionWeatherAndInfo();
                     return;
                 }
+
+                showAttractionInfoPanel();
 
                 if (
                     typeof attractionsSource !== 'undefined' &&
@@ -12513,17 +12462,188 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
                     });
 
                     if (feature) {
-                        window.showAttractionFloatingPanels(feature);
+                        showAllowedAttractionPanels(feature);
                     }
                 }
-            }, 80);
+            }, 120);
 
             return result;
         };
     }
 
-    // 5. 页面初始状态默认隐藏
+    // 3. 属性查询 searchAttractionsByAttribute：允许显示
+    // 属性查询有多个结果时，属性框显示列表；天气框显示第一个查询结果的城市天气
+    if (typeof window.searchAttractionsByAttribute === 'function') {
+        const oldSearchAttractionsByAttribute = window.searchAttractionsByAttribute;
+
+        window.searchAttractionsByAttribute = function () {
+            markAllowedAction();
+
+            const result = oldSearchAttractionsByAttribute.apply(this, arguments);
+
+            setTimeout(function () {
+                showAttractionInfoPanel();
+
+                if (
+                    typeof searchResultSource !== 'undefined' &&
+                    searchResultSource
+                ) {
+                    const features = searchResultSource.getFeatures();
+
+                    if (
+                        features &&
+                        features.length > 0 &&
+                        typeof window.showCleanAmapWeatherForFeature === 'function'
+                    ) {
+                        window.showCleanAmapWeatherForFeature(features[0]);
+                    }
+                }
+            }, 150);
+
+            return result;
+        };
+    }
+
+    function isAllowedControlClick(target) {
+        if (!target) {
+            return false;
+        }
+
+        const onclickText = (
+            target.getAttribute &&
+            target.getAttribute('onclick')
+        ) || '';
+
+        const aroundText = (
+            target.closest('.dropdown-menu, .dropdown, .form-group, .mb-3, .query-section, .card, .right-panel, .sidebar')?.innerText ||
+            target.innerText ||
+            target.textContent ||
+            ''
+        );
+
+        // 景点查询允许
+        if (
+            onclickText.includes('queryAttraction') ||
+            target.closest('#attractionsMenu') ||
+            aroundText.includes('景点查询')
+        ) {
+            return true;
+        }
+
+        // 属性查询允许
+        if (
+            onclickText.includes('searchAttractionsByAttribute') ||
+            target.id === 'attrSearchKeyword' ||
+            target.id === 'attrSearchCategory' ||
+            aroundText.includes('属性查询')
+        ) {
+            return true;
+        }
+
+        return false;
+    }
+
+    // 4. 点击其他功能按钮 / 菜单 / 下拉框：不是白名单就清除
+    document.addEventListener('click', function (event) {
+        const target = event.target;
+
+        if (!target) {
+            return;
+        }
+
+        // 点地图交给 map.singleclick 判断
+        if (target.closest('#map')) {
+            return;
+        }
+
+        // 点天气框内部，不处理
+        if (target.closest('#weatherPanel')) {
+            return;
+        }
+
+        // 点属性信息框内部，不处理，例如收藏按钮、点评内容
+        if (target.closest('#featureInfo') || target.closest('#infoPanel')) {
+            return;
+        }
+
+        // 白名单：景点查询、属性查询
+        if (isAllowedControlClick(target)) {
+            markAllowedAction();
+            return;
+        }
+
+        const isFunctionElement =
+            target.closest('button') ||
+            target.closest('a') ||
+            target.closest('select') ||
+            target.closest('input') ||
+            target.closest('.btn') ||
+            target.closest('.dropdown-item') ||
+            target.closest('.nav-link') ||
+            target.closest('.tool-btn');
+
+        if (isFunctionElement) {
+            hideAttractionWeatherAndInfo();
+        }
+    }, true);
+
+    // 5. 下拉框变化：只有景点查询 / 属性查询允许，其余全部清除
+    document.addEventListener('change', function (event) {
+        const target = event.target;
+
+        if (!target) {
+            return;
+        }
+
+        if (
+            target.closest('#weatherPanel') ||
+            target.closest('#featureInfo') ||
+            target.closest('#infoPanel')
+        ) {
+            return;
+        }
+
+        if (isAllowedControlClick(target)) {
+            markAllowedAction();
+            return;
+        }
+
+        if (
+            target.tagName === 'SELECT' ||
+            target.tagName === 'INPUT'
+        ) {
+            hideAttractionWeatherAndInfo();
+        }
+    }, true);
+
+    // 6. 防止旧的 featureInfo 自动弹窗逻辑把其他查询结果又弹出来
+    // 只要最近不是白名单操作，就把它压回去
+    const featureInfo = document.getElementById('featureInfo');
+
+    if (featureInfo) {
+        const observer = new MutationObserver(function () {
+            const recentlyAllowed = Date.now() - window.__lastAttractionPanelAllowedTime < 800;
+
+            if (!recentlyAllowed) {
+                setTimeout(function () {
+                    const stillNotAllowed = Date.now() - window.__lastAttractionPanelAllowedTime >= 800;
+
+                    if (stillNotAllowed) {
+                        hideAttractionWeatherAndInfo();
+                    }
+                }, 30);
+            }
+        });
+
+        observer.observe(featureInfo, {
+            childList: true,
+            subtree: true,
+            characterData: true
+        });
+    }
+
+    // 7. 页面初始默认隐藏
     setTimeout(function () {
-        window.hideAttractionFloatingPanels();
-    }, 300);
+        hideAttractionWeatherAndInfo();
+    }, 500);
 })();
