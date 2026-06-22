@@ -2852,7 +2852,6 @@ function loadReviews(name, coords) {
                         </div>
                     `;
                 });
-                reviewsHtml += `<div class="reviews-source">${t('attractions.dataSource') || '数据来源'}: ${source}</div>`;
             } else {
                 reviewsHtml += `<div class="reviews-empty">${t('attractions.noReviews')}</div>`;
             }
@@ -10408,10 +10407,6 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
                 <div style="font-size:11px;color:#555;line-height:1.5;">
                     ${extra.airAdvice}<br>
                     ${extra.crowdAdvice}
-                </div>
-
-                <div style="font-size:10px;color:#999;margin-top:6px;text-align:right;">
-                    天气：高德API · AQI/人流量：演示数据
                 </div>
             </div>
         `;
