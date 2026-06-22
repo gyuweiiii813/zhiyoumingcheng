@@ -1493,8 +1493,7 @@ function startBoxSelect() {
         clearBoxSelectListeners();
 
         alert('框选查询完成，共查询到 ' + results.length + ' 个景点。');
-        if (typeof clearSpatialQueryRangeFeatures === 'function') {
-    clearSpatialQueryRangeFeatures();
+    
 }
     });
 
@@ -4484,11 +4483,22 @@ function closeInfoPanel() {
     panel.classList.remove('show');
     panel.style.display = 'none';
 
-    // 关闭结果窗口后，自动清除框选 / 圆选 / 多边形查询范围
-    clearSpatialQueryRangeFeatures();
+    const featureInfo = document.getElementById('featureInfo');
 
-    // 关闭结果窗口后，自动清除叠加分析绘制区域和高亮景点
-    clearOverlayAnalysisResult();
+    if (featureInfo) {
+        featureInfo.innerHTML = '';
+        featureInfo.style.display = 'none';
+    }
+
+    // 只在用户关闭属性信息框时，清除空间查询绘制范围
+    if (typeof clearSpatialQueryRangeFeatures === 'function') {
+        clearSpatialQueryRangeFeatures();
+    }
+
+    // 如果你叠加分析也希望关闭属性框后清除，可以保留
+    if (typeof clearOverlayAnalysisResult === 'function') {
+        clearOverlayAnalysisResult();
+    }
 }
 
 // 自动监听 featureInfo 内容变化：只要有结果写入，就弹出属性信息框
@@ -4712,8 +4722,6 @@ polygonSelectMoveKey = map.on('pointermove', function(evt) {
         clearPolygonSelectListeners();
 
         alert('多边形查询完成，共查询到 ' + results.length + ' 个景点。');
-        if (typeof clearSpatialQueryRangeFeatures === 'function') {
-    clearSpatialQueryRangeFeatures();
 }
     };
 
@@ -4890,8 +4898,6 @@ function startCircleSelect() {
         clearCircleSelectListeners();
 
         alert('圆选查询完成，共查询到 ' + results.length + ' 个景点。');
-        if (typeof clearSpatialQueryRangeFeatures === 'function') {
-    clearSpatialQueryRangeFeatures();
 }
     });
 
