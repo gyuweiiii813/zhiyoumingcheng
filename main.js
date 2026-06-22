@@ -10368,3 +10368,823 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
     window.trackSpeed = 0.45;
     window.routeAnimationSpeed = 0.45;
 })();
+
+// =====================================================
+// 高德 API 最终整合版
+// 功能：
+// 1. 路线规划调用高德 AMap.Driving 真实路线
+// 2. 模拟轨迹使用真实路线坐标，最后落在终点
+// 3. 天气调用高德 AMap.Weather
+// 4. 空气质量、人流量使用按城市/景点生成的合理演示数据
+// 5. 天气框默认隐藏，点击景点后显示，可手动关闭
+// 请放在 main.js 最下面
+// =====================================================
+(function () {
+    if (window.__amapFinalPatchInstalled) {
+        return;
+    }
+
+    window.__amapFinalPatchInstalled = true;
+
+    const oldFetch = window.fetch.bind(window);
+
+    let currentWeatherFeature = null;
+    let weatherPanelClosed = true;
+
+    function makeJsonResponse(data) {
+        return Promise.resolve(
+            new Response(JSON.stringify(data), {
+                status: 200,
+                headers: {
+                    'Content-Type': 'application/json; charset=utf-8'
+                }
+            })
+        );
+    }
+
+    function getUrlParam(urlText, key) {
+        try {
+            const query = urlText.split('?')[1] || '';
+            const params = new URLSearchParams(query);
+            return params.get(key) || '';
+        } catch (e) {
+            return '';
+        }
+    }
+
+    function getFeatureName(feature) {
+        if (!feature) {
+            return '';
+        }
+
+        return (
+            feature.get('name') ||
+            feature.get('title') ||
+            feature.get('名称') ||
+            feature.get('id') ||
+            ''
+        );
+    }
+
+    function getFeatureProvince(feature) {
+        if (!feature) {
+            return '';
+        }
+
+        if (typeof getAttractionProvince === 'function') {
+            const province = getAttractionProvince(feature);
+            if (province && province !== '其他省份') {
+                return province;
+            }
+        }
+
+        return feature.get('province') || feature.get('省份') || '';
+    }
+
+    function getFeatureCity(feature) {
+        if (!feature) {
+            return '';
+        }
+
+        if (typeof getAttractionCity === 'function') {
+            const city = getAttractionCity(feature);
+            if (city && city !== '其他城市') {
+                return city;
+            }
+        }
+
+        return feature.get('city') || feature.get('城市') || '';
+    }
+
+    function parseCoordinateText(text) {
+        if (!text) {
+            return null;
+        }
+
+        text = decodeURIComponent(String(text)).trim();
+
+        try {
+            const jsonValue = JSON.parse(text);
+
+            if (
+                Array.isArray(jsonValue) &&
+                jsonValue.length >= 2 &&
+                !isNaN(Number(jsonValue[0])) &&
+                !isNaN(Number(jsonValue[1]))
+            ) {
+                return [Number(jsonValue[0]), Number(jsonValue[1])];
+            }
+        } catch (e) {}
+
+        const match = text.match(/(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)/);
+
+        if (match) {
+            const lon = Number(match[1]);
+            const lat = Number(match[3]);
+
+            if (!isNaN(lon) && !isNaN(lat)) {
+                return [lon, lat];
+            }
+        }
+
+        return null;
+    }
+
+    function findAttractionCoordinateByName(nameText) {
+        if (!nameText || typeof attractionsSource === 'undefined' || !attractionsSource) {
+            return null;
+        }
+
+        const keyword = decodeURIComponent(String(nameText)).trim();
+
+        if (!keyword) {
+            return null;
+        }
+
+        const features = attractionsSource.getFeatures();
+
+        let foundFeature = features.find(function (feature) {
+            return getFeatureName(feature) === keyword;
+        });
+
+        if (!foundFeature) {
+            foundFeature = features.find(function (feature) {
+                const name = getFeatureName(feature);
+                return name && (name.includes(keyword) || keyword.includes(name));
+            });
+        }
+
+        if (foundFeature && foundFeature.getGeometry()) {
+            const coord = foundFeature.getGeometry().getCoordinates();
+            return [Number(coord[0]), Number(coord[1])];
+        }
+
+        return null;
+    }
+
+    function resolveRoutePoint(text) {
+        return parseCoordinateText(text) || findAttractionCoordinateByName(text);
+    }
+
+    function parseWaypoints(urlText) {
+        const waypointText =
+            getUrlParam(urlText, 'waypoints') ||
+            getUrlParam(urlText, 'waypoint') ||
+            getUrlParam(urlText, 'via') ||
+            '';
+
+        if (!waypointText) {
+            return [];
+        }
+
+        return decodeURIComponent(waypointText)
+            .split(/[;|]/)
+            .map(function (item) {
+                return resolveRoutePoint(item);
+            })
+            .filter(function (coord) {
+                return coord && coord.length >= 2;
+            });
+    }
+
+    function coordsToPolyline(coords) {
+        return coords.map(function (coord) {
+            return coord[0] + ',' + coord[1];
+        }).join(';');
+    }
+
+    function getLngLatFromAmapPoint(point) {
+        if (!point) {
+            return null;
+        }
+
+        if (typeof point.getLng === 'function' && typeof point.getLat === 'function') {
+            return [
+                Number(point.getLng().toFixed(6)),
+                Number(point.getLat().toFixed(6))
+            ];
+        }
+
+        if (point.lng !== undefined && point.lat !== undefined) {
+            return [
+                Number(Number(point.lng).toFixed(6)),
+                Number(Number(point.lat).toFixed(6))
+            ];
+        }
+
+        return null;
+    }
+
+    function calculateDistanceMeters(coord1, coord2) {
+        if (
+            typeof ol !== 'undefined' &&
+            ol.sphere &&
+            typeof ol.sphere.getDistance === 'function'
+        ) {
+            return ol.sphere.getDistance(coord1, coord2);
+        }
+
+        const dx = coord1[0] - coord2[0];
+        const dy = coord1[1] - coord2[1];
+
+        return Math.sqrt(dx * dx + dy * dy) * 111000;
+    }
+
+    function densifySegment(start, end, count) {
+        const coords = [];
+
+        for (let i = 0; i <= count; i++) {
+            const t = i / count;
+
+            coords.push([
+                Number((start[0] + (end[0] - start[0]) * t).toFixed(6)),
+                Number((start[1] + (end[1] - start[1]) * t).toFixed(6))
+            ]);
+        }
+
+        return coords;
+    }
+
+    function createFallbackRoute(start, end, waypoints) {
+        const points = [start].concat(waypoints || []).concat([end]);
+
+        let coords = [];
+
+        for (let i = 0; i < points.length - 1; i++) {
+            const part = densifySegment(points[i], points[i + 1], 40);
+
+            if (i > 0) {
+                part.shift();
+            }
+
+            coords = coords.concat(part);
+        }
+
+        coords[0] = [
+            Number(start[0].toFixed(6)),
+            Number(start[1].toFixed(6))
+        ];
+
+        coords[coords.length - 1] = [
+            Number(end[0].toFixed(6)),
+            Number(end[1].toFixed(6))
+        ];
+
+        let totalDistance = 0;
+
+        for (let i = 0; i < points.length - 1; i++) {
+            totalDistance += calculateDistanceMeters(points[i], points[i + 1]);
+        }
+
+        return {
+            status: '1',
+            info: '高德路线失败，使用静态兜底路线',
+            route: {
+                paths: [
+                    {
+                        distance: String(Math.round(totalDistance)),
+                        duration: String(Math.round(Math.max(1200, totalDistance / 4))),
+                        steps: [
+                            {
+                                road: '静态兜底路线',
+                                polyline: coordsToPolyline(coords)
+                            }
+                        ]
+                    }
+                ]
+            }
+        };
+    }
+
+    function requestAmapDrivingRoute(start, end, waypoints) {
+        return new Promise(function (resolve) {
+            if (!window.AMap || !AMap.Driving) {
+                console.warn('高德 AMap.Driving 没有加载成功，使用兜底路线。');
+                resolve(createFallbackRoute(start, end, waypoints));
+                return;
+            }
+
+            AMap.plugin('AMap.Driving', function () {
+                const driving = new AMap.Driving({
+                    policy: AMap.DrivingPolicy.LEAST_TIME
+                });
+
+                const origin = new AMap.LngLat(start[0], start[1]);
+                const destination = new AMap.LngLat(end[0], end[1]);
+
+                const options = {};
+
+                if (waypoints && waypoints.length > 0) {
+                    options.waypoints = waypoints.map(function (coord) {
+                        return new AMap.LngLat(coord[0], coord[1]);
+                    });
+                }
+
+                driving.search(origin, destination, options, function (status, result) {
+                    if (
+                        status !== 'complete' ||
+                        !result ||
+                        !result.routes ||
+                        result.routes.length === 0
+                    ) {
+                        console.warn('高德真实路线规划失败，使用兜底路线：', status, result);
+                        resolve(createFallbackRoute(start, end, waypoints));
+                        return;
+                    }
+
+                    const route = result.routes[0];
+                    const coords = [];
+
+                    route.steps.forEach(function (step) {
+                        if (!step.path) {
+                            return;
+                        }
+
+                        step.path.forEach(function (point) {
+                            const coord = getLngLatFromAmapPoint(point);
+
+                            if (coord) {
+                                coords.push(coord);
+                            }
+                        });
+                    });
+
+                    if (coords.length < 2) {
+                        resolve(createFallbackRoute(start, end, waypoints));
+                        return;
+                    }
+
+                    // 强制起点和终点准确落在景点坐标上
+                    coords[0] = [
+                        Number(start[0].toFixed(6)),
+                        Number(start[1].toFixed(6))
+                    ];
+
+                    coords[coords.length - 1] = [
+                        Number(end[0].toFixed(6)),
+                        Number(end[1].toFixed(6))
+                    ];
+
+                    resolve({
+                        status: '1',
+                        info: '高德真实道路路线',
+                        route: {
+                            paths: [
+                                {
+                                    distance: String(route.distance || 0),
+                                    duration: String(route.time || 0),
+                                    steps: [
+                                        {
+                                            road: '高德真实道路路线',
+                                            polyline: coordsToPolyline(coords)
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    });
+                });
+            });
+        });
+    }
+
+    function createAmapRouteResponse(urlText) {
+        const originText =
+            getUrlParam(urlText, 'origin') ||
+            getUrlParam(urlText, 'start') ||
+            getUrlParam(urlText, 'from') ||
+            '';
+
+        const destinationText =
+            getUrlParam(urlText, 'destination') ||
+            getUrlParam(urlText, 'end') ||
+            getUrlParam(urlText, 'to') ||
+            '';
+
+        const start = resolveRoutePoint(originText);
+        const end = resolveRoutePoint(destinationText);
+        const waypoints = parseWaypoints(urlText);
+
+        if (!start || !end) {
+            return Promise.resolve({
+                status: '0',
+                info: '路线起点或终点解析失败，请重新选择景点'
+            });
+        }
+
+        return requestAmapDrivingRoute(start, end, waypoints);
+    }
+
+    function inferCityByName(name, province, city) {
+        name = String(name || '');
+
+        if (city && city !== '其他城市') {
+            return city.endsWith('市') || city.includes('自治州') ? city : city + '市';
+        }
+
+        if (name.includes('故宫') || name.includes('天坛') || name.includes('颐和园') || name.includes('八达岭')) return '北京市';
+        if (name.includes('西湖') || name.includes('灵隐') || name.includes('宋城')) return '杭州市';
+        if (name.includes('黄山') || name.includes('宏村') || name.includes('西递')) return '黄山市';
+        if (name.includes('桂林') || name.includes('漓江') || name.includes('阳朔')) return '桂林市';
+        if (name.includes('丽江') || name.includes('玉龙') || name.includes('束河')) return '丽江市';
+        if (name.includes('大理') || name.includes('崇圣寺')) return '大理市';
+        if (name.includes('鼓浪屿') || name.includes('厦门')) return '厦门市';
+        if (name.includes('武夷山')) return '南平市';
+        if (name.includes('九寨沟') || name.includes('黄龙')) return '阿坝藏族羌族自治州';
+        if (name.includes('都江堰') || name.includes('峨眉山')) return '成都市';
+        if (name.includes('兵马俑') || name.includes('大雁塔') || name.includes('华清宫') || name.includes('西安')) return '西安市';
+        if (name.includes('华山')) return '渭南市';
+        if (name.includes('苏州') || name.includes('拙政园') || name.includes('虎丘')) return '苏州市';
+        if (name.includes('广州') || name.includes('陈家祠')) return '广州市';
+        if (name.includes('布达拉宫')) return '拉萨市';
+        if (name.includes('承德')) return '承德市';
+        if (name.includes('凤凰古城')) return '湘西土家族苗族自治州';
+        if (name.includes('张家界')) return '张家界市';
+        if (name.includes('龙门石窟')) return '洛阳市';
+        if (name.includes('平遥')) return '晋中市';
+        if (name.includes('曲阜')) return '济宁市';
+
+        if (province && province !== '其他省份') {
+            return province;
+        }
+
+        return '北京市';
+    }
+
+    function getWeatherPanel() {
+        let panel = document.getElementById('weatherPanel');
+
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.id = 'weatherPanel';
+            document.body.appendChild(panel);
+        }
+
+        return panel;
+    }
+
+    function hideWeatherPanel() {
+        const panel = getWeatherPanel();
+        panel.style.display = 'none';
+    }
+
+    window.closeStaticWeatherPanel = function () {
+        weatherPanelClosed = true;
+        currentWeatherFeature = null;
+        hideWeatherPanel();
+    };
+
+    function hashText(text) {
+        text = String(text || '');
+        let hash = 0;
+
+        for (let i = 0; i < text.length; i++) {
+            hash = ((hash << 5) - hash) + text.charCodeAt(i);
+            hash |= 0;
+        }
+
+        return Math.abs(hash);
+    }
+
+    function randomByKey(key, min, max) {
+        const seed = hashText(key);
+        const x = Math.sin(seed) * 10000;
+        const ratio = x - Math.floor(x);
+
+        return Math.round(min + ratio * (max - min));
+    }
+
+    function getAirAndCrowdData(feature, cityName) {
+        const name = getFeatureName(feature);
+
+        const aqiBase = randomByKey(cityName + '_aqi', 42, 88);
+        const aqi = aqiBase + randomByKey(name + '_aqi_offset', -4, 4);
+
+        let airLevel = '良';
+        let airColor = '#f1c40f';
+        let airAdvice = '空气质量良好，适合正常游览。';
+
+        if (aqi <= 50) {
+            airLevel = '优';
+            airColor = '#2ecc71';
+            airAdvice = '空气质量优秀，非常适合户外游览。';
+        } else if (aqi <= 100) {
+            airLevel = '良';
+            airColor = '#f1c40f';
+            airAdvice = '空气质量良好，适合正常游览。';
+        } else {
+            airLevel = '轻度污染';
+            airColor = '#e67e22';
+            airAdvice = '空气质量一般，建议适当减少长时间户外活动。';
+        }
+
+        const crowd = randomByKey(name + '_crowd', 25, 92);
+
+        let crowdLevel = '舒适';
+        let crowdColor = '#2ecc71';
+        let crowdAdvice = '当前人流量较少，适合游览。';
+
+        if (crowd < 40) {
+            crowdLevel = '舒适';
+            crowdColor = '#2ecc71';
+            crowdAdvice = '当前人流量较少，适合游览。';
+        } else if (crowd < 65) {
+            crowdLevel = '适中';
+            crowdColor = '#f1c40f';
+            crowdAdvice = '当前人流量适中，游览体验较好。';
+        } else if (crowd < 82) {
+            crowdLevel = '拥挤';
+            crowdColor = '#e67e22';
+            crowdAdvice = '游客较多，建议错峰游览。';
+        } else {
+            crowdLevel = '爆满';
+            crowdColor = '#e74c3c';
+            crowdAdvice = '当前人流量较大，建议更换游览时间。';
+        }
+
+        return {
+            aqi: aqi,
+            pm25: Math.max(10, Math.round(aqi * 0.45)),
+            pm10: Math.max(20, Math.round(aqi * 0.78)),
+            airLevel: airLevel,
+            airColor: airColor,
+            airAdvice: airAdvice,
+            crowd: crowd,
+            crowdLevel: crowdLevel,
+            crowdColor: crowdColor,
+            crowdAdvice: crowdAdvice
+        };
+    }
+
+    function renderWeatherPanel(feature, liveWeather) {
+        const name = getFeatureName(feature);
+        const province = getFeatureProvince(feature);
+        const city = inferCityByName(name, province, getFeatureCity(feature));
+        const extra = getAirAndCrowdData(feature, city);
+
+        const panel = getWeatherPanel();
+
+        const weatherText = liveWeather.weather || '多云';
+        const temp = liveWeather.temperature || '--';
+        const humidity = liveWeather.humidity || '--';
+        const windDirection = liveWeather.windDirection || '东南';
+        const windPower = liveWeather.windPower || '2';
+
+        let icon = '⛅';
+
+        if (weatherText.includes('晴')) icon = '☀️';
+        if (weatherText.includes('阴')) icon = '🌥️';
+        if (weatherText.includes('雨')) icon = '🌧️';
+        if (weatherText.includes('雪')) icon = '❄️';
+
+        panel.style.display = 'block';
+        panel.style.position = 'absolute';
+        panel.style.left = '315px';
+        panel.style.top = '185px';
+        panel.style.zIndex = '9999';
+        panel.style.width = '230px';
+        panel.style.background = 'linear-gradient(135deg, #5b6ee1, #7d4ac7)';
+        panel.style.borderRadius = '8px';
+        panel.style.boxShadow = '0 4px 14px rgba(0,0,0,0.28)';
+        panel.style.color = '#fff';
+        panel.style.fontSize = '12px';
+        panel.style.overflow = 'hidden';
+
+        panel.innerHTML = `
+            <div style="padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.25); position: relative;">
+                <button 
+                    type="button" 
+                    onclick="closeStaticWeatherPanel()" 
+                    style="
+                        position:absolute;
+                        right:6px;
+                        top:5px;
+                        border:none;
+                        background:rgba(255,255,255,0.18);
+                        color:#fff;
+                        border-radius:50%;
+                        width:22px;
+                        height:22px;
+                        line-height:20px;
+                        font-size:16px;
+                        cursor:pointer;
+                    "
+                    title="关闭"
+                >×</button>
+
+                <div style="display:flex;align-items:center;justify-content:space-between;padding-right:26px;">
+                    <div style="font-size:20px;">${icon}</div>
+                    <div style="text-align:right;">
+                        <div style="font-size:17px;font-weight:bold;">${temp}℃</div>
+                        <div style="font-size:11px;">${weatherText}</div>
+                    </div>
+                </div>
+
+                <div style="margin-top:4px;font-size:11px;opacity:0.95;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                    ${city} · ${name}
+                </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;text-align:center;padding:6px 4px;border-bottom:1px solid rgba(255,255,255,0.2);">
+                <div>
+                    <div>💧</div>
+                    <div>${humidity}%</div>
+                </div>
+                <div>
+                    <div>🌫️</div>
+                    <div>AQI ${extra.aqi}</div>
+                </div>
+                <div>
+                    <div>👥</div>
+                    <div>${extra.crowd}%</div>
+                </div>
+            </div>
+
+            <div style="background:rgba(255,255,255,0.94);color:#333;padding:8px 10px;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+                    <span>风向风力</span>
+                    <span>${windDirection}风 ${windPower}级</span>
+                </div>
+
+                <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+                    <span>空气质量</span>
+                    <span style="color:${extra.airColor};font-weight:bold;">${extra.airLevel}</span>
+                </div>
+
+                <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+                    <span>人流量</span>
+                    <span style="color:${extra.crowdColor};font-weight:bold;">${extra.crowdLevel}</span>
+                </div>
+
+                <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:11px;color:#666;">
+                    <span>PM2.5：${extra.pm25}</span>
+                    <span>PM10：${extra.pm10}</span>
+                </div>
+
+                <div style="font-size:11px;color:#555;line-height:1.5;">
+                    ${extra.airAdvice}<br>
+                    ${extra.crowdAdvice}
+                </div>
+
+                <div style="font-size:10px;color:#999;margin-top:6px;text-align:right;">
+                    天气：高德API · AQI/人流量：演示数据
+                </div>
+            </div>
+        `;
+    }
+
+    function queryAmapWeather(feature) {
+        if (!feature) {
+            return;
+        }
+
+        const name = getFeatureName(feature);
+        const province = getFeatureProvince(feature);
+        const city = inferCityByName(name, province, getFeatureCity(feature));
+
+        currentWeatherFeature = feature;
+        weatherPanelClosed = false;
+
+        if (!window.AMap || !AMap.Weather) {
+            console.warn('高德 AMap.Weather 未加载，使用兜底天气。');
+            renderWeatherPanel(feature, {
+                weather: '多云',
+                temperature: 28,
+                humidity: 60,
+                windDirection: '东南',
+                windPower: '2'
+            });
+            return;
+        }
+
+        AMap.plugin('AMap.Weather', function () {
+            const weather = new AMap.Weather();
+
+            weather.getLive(city, function (err, data) {
+                if (weatherPanelClosed) {
+                    return;
+                }
+
+                if (err || !data) {
+                    console.warn('高德天气查询失败，使用兜底天气：', err);
+                    renderWeatherPanel(feature, {
+                        weather: '多云',
+                        temperature: 28,
+                        humidity: 60,
+                        windDirection: '东南',
+                        windPower: '2'
+                    });
+                    return;
+                }
+
+                renderWeatherPanel(feature, data);
+            });
+        });
+    }
+
+    function isAttractionFeature(feature) {
+        if (!feature || !feature.getGeometry()) {
+            return false;
+        }
+
+        const name = getFeatureName(feature);
+
+        if (!name) {
+            return false;
+        }
+
+        const type = feature.get('type') || feature.get('drawType') || '';
+
+        if (
+            type === 'box_select' ||
+            type === 'circle_select' ||
+            type === 'polygon_select' ||
+            type === 'spatial_query' ||
+            type === 'route' ||
+            type === 'track' ||
+            type === 'draw'
+        ) {
+            return false;
+        }
+
+        return true;
+    }
+
+    function bindAmapWeatherClick() {
+        if (typeof map === 'undefined' || !map || window.__amapWeatherFinalClickBound) {
+            return;
+        }
+
+        window.__amapWeatherFinalClickBound = true;
+
+        map.on('singleclick', function (evt) {
+            let clickedFeature = null;
+
+            map.forEachFeatureAtPixel(evt.pixel, function (feature) {
+                if (isAttractionFeature(feature)) {
+                    clickedFeature = feature;
+                    return true;
+                }
+
+                return false;
+            });
+
+            if (clickedFeature) {
+                setTimeout(function () {
+                    queryAmapWeather(clickedFeature);
+                }, 200);
+            }
+        });
+    }
+
+    // 覆盖旧天气函数，防止旧代码自己弹出天气框
+    window.loadWeather = function () { return Promise.resolve(null); };
+    window.loadWeatherData = function () { return Promise.resolve(null); };
+    window.queryWeather = function () { return Promise.resolve(null); };
+    window.queryAirQuality = function () { return Promise.resolve(null); };
+    window.loadAirQualityData = function () { return Promise.resolve(null); };
+    window.startRealTimeUpdate = function () { return null; };
+    window.stopRealTimeUpdate = function () { return null; };
+
+    // 最终拦截 /api/route，让路线规划和模拟轨迹使用高德真实道路路线
+    window.fetch = function (input, init) {
+        const urlText = typeof input === 'string'
+            ? input
+            : input && input.url
+                ? input.url
+                : '';
+
+        const lowerUrl = urlText.toLowerCase();
+
+        if (lowerUrl.includes('api/route')) {
+            return createAmapRouteResponse(urlText).then(function (data) {
+                return makeJsonResponse(data);
+            });
+        }
+
+        return oldFetch(input, init);
+    };
+
+    // 尽量降低轨迹播放速度
+    window.trackPlaybackSpeed = 0.45;
+    window.trackSpeed = 0.45;
+    window.routeAnimationSpeed = 0.45;
+
+    // 页面默认隐藏天气框
+    hideWeatherPanel();
+
+    setTimeout(hideWeatherPanel, 500);
+    setTimeout(hideWeatherPanel, 1500);
+    setTimeout(hideWeatherPanel, 3000);
+
+    setTimeout(bindAmapWeatherClick, 1000);
+    setTimeout(bindAmapWeatherClick, 2500);
+    setTimeout(bindAmapWeatherClick, 4000);
+
+    // 防止旧天气框反复出现
+    setInterval(function () {
+        if (!currentWeatherFeature || weatherPanelClosed) {
+            hideWeatherPanel();
+        }
+    }, 800);
+})();
