@@ -7302,7 +7302,6 @@ function supplementProvinceCityAttractions() {
 
         // 福建
         { name: '鼓浪屿', province: '福建', city: '厦门', category: '自然风光', coordinate: [118.066, 24.447], description: '厦门代表性岛屿景区，兼具自然风光和历史建筑价值。' },
-        { name: '厦门大学', province: '福建', city: '厦门', category: '文化景区', coordinate: [118.096, 24.435], description: '校园文化、滨海景观与城市旅游结合的热门景点。' },
         { name: '武夷山', province: '福建', city: '武夷山', category: '自然风光', coordinate: [118.035, 27.756], description: '福建自然与文化双重价值景区，适合生态旅游和茶文化展示。' },
         { name: '福建土楼', province: '福建', city: '龙岩', category: '古建筑', coordinate: [117.000, 24.659], description: '客家传统建筑代表，具有独特建筑形态和文化价值。' },
 
