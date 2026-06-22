@@ -1640,6 +1640,7 @@ map.on('click', function(evt) {
         
         html += '</div>';
         document.getElementById('featureInfo').innerHTML = html;
+        document.getElementById('featureInfo').style.display = 'block';
         
         if (props.name) {
     if (typeof window.showCleanAmapWeatherForFeature === 'function') {
@@ -2482,7 +2483,7 @@ function focusAttraction(coords) {
         html += '</div>';
         
         document.getElementById('featureInfo').innerHTML = html;
-        document.getElementById('weatherPanel').style.display = 'block';
+document.getElementById('featureInfo').style.display = 'block';
         loadWeather(coords[0], coords[1]);
         queryAirQuality(coords[0], coords[1], props.name);
         loadReviews(props.name, coords);
@@ -2556,7 +2557,7 @@ function queryAttraction(id) {
         html += '</div>';
         
         document.getElementById('featureInfo').innerHTML = html;
-        document.getElementById('weatherPanel').style.display = 'block';
+document.getElementById('featureInfo').style.display = 'block';
         loadWeather(coords[0], coords[1]);
         queryAirQuality(coords[0], coords[1], props.name);
         loadReviews(props.name, coords);
@@ -3598,6 +3599,7 @@ attractionsLayer.setZIndex(100);
             
             html += '</div>';
             document.getElementById('featureInfo').innerHTML = html;
+document.getElementById('featureInfo').style.display = 'block';
             
             if (name) {
                 setTimeout(() => loadReviews(name, coords.join(',')), 100);
@@ -3911,6 +3913,7 @@ function showBufferAnalysisResult(centerName, radiusKm, resultFeatures) {
     }
 
     document.getElementById('featureInfo').innerHTML = html;
+document.getElementById('featureInfo').style.display = 'block';
 }
 
 // 叠加分析：绘制一个多边形，将分析区域与景点图层叠加，统计区域内景点
@@ -4086,6 +4089,7 @@ function showOverlayAnalysisResult(resultFeatures, categoryStats, cityStats, are
 
     if (featureInfo) {
         featureInfo.innerHTML = html;
+        featureInfo.style.display = 'block';
     }
 
     if (typeof showInfoPanel === 'function') {
@@ -4243,6 +4247,7 @@ function showSpatialQueryResult(title, results) {
 
     if (featureInfo) {
         featureInfo.innerHTML = html;
+        featureInfo.style.display = 'block';
     } else {
         alert(title + '：共查询到 ' + results.length + ' 个景点');
     }
@@ -4345,6 +4350,7 @@ function showAttributeSearchResult(keyword, category, results) {
 
     if (featureInfo) {
         featureInfo.innerHTML = html;
+        featureInfo.style.display = 'block';
     } else {
         alert('属性查询完成，共查询到 ' + results.length + ' 个景点。');
     }
@@ -12284,12 +12290,12 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
 })();
 
 // =====================================================
-// 天气框 / 属性信息框 白名单显示控制
-// 只有这三种操作允许显示：
+// 天气框 / 属性信息框 白名单清除控制
+// 允许显示的操作只有：
 // 1. 点击地图中的景点
-// 2. 景点查询 queryAttraction
-// 3. 属性查询 searchAttractionsByAttribute
-// 其他功能一律自动清除天气框和属性信息框
+// 2. 景点查询
+// 3. 属性查询
+// 其他功能：自动清除天气框和属性信息框
 // =====================================================
 (function () {
     if (window.__attractionPanelWhitelistControlInstalled) {
@@ -12297,56 +12303,6 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
     }
 
     window.__attractionPanelWhitelistControlInstalled = true;
-
-    window.__lastAttractionPanelAllowedTime = 0;
-
-    function markAllowedAction() {
-        window.__lastAttractionPanelAllowedTime = Date.now();
-    }
-
-    function getFeatureNameSafe(feature) {
-        if (!feature) return '';
-
-        return (
-            feature.get('name') ||
-            feature.get('title') ||
-            feature.get('名称') ||
-            feature.get('id') ||
-            ''
-        );
-    }
-
-    function isAttractionFeature(feature) {
-        if (!feature || !feature.getGeometry()) {
-            return false;
-        }
-
-        const name = getFeatureNameSafe(feature);
-
-        if (!name) {
-            return false;
-        }
-
-        const type = feature.get('type') || feature.get('drawType') || '';
-
-        if ([
-            'box_select',
-            'circle_select',
-            'polygon_select',
-            'spatial_query',
-            'route',
-            'track',
-            'draw',
-            'user_draw',
-            'measure',
-            'buffer',
-            'overlayPoint'
-        ].includes(type)) {
-            return false;
-        }
-
-        return true;
-    }
 
     function hideAttractionWeatherAndInfo() {
         const weatherPanel = document.getElementById('weatherPanel');
@@ -12357,7 +12313,6 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
                 'light-weather-active',
                 'weather-lock-active'
             );
-
             weatherPanel.style.display = 'none';
             weatherPanel.style.visibility = 'hidden';
             weatherPanel.style.opacity = '0';
@@ -12370,49 +12325,87 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
             featureInfo.style.display = 'none';
         }
 
-        const infoPanel = document.getElementById('infoPanel');
-
-        if (infoPanel) {
-            infoPanel.classList.remove('show');
-            infoPanel.style.display = 'none';
-        }
-
         currentSelectedFeature = null;
         window.currentSelectedFeature = null;
     }
 
-    function showAttractionInfoPanel() {
-        const featureInfo = document.getElementById('featureInfo');
-
-        if (featureInfo) {
-            featureInfo.style.display = 'block';
+    function isAttractionFeature(feature) {
+        if (!feature || !feature.getGeometry()) {
+            return false;
         }
 
-        const infoPanel = document.getElementById('infoPanel');
+        const name =
+            feature.get('name') ||
+            feature.get('title') ||
+            feature.get('名称') ||
+            '';
 
-        if (infoPanel) {
-            infoPanel.style.display = 'block';
-            infoPanel.classList.add('show');
+        if (!name) {
+            return false;
         }
+
+        const type = feature.get('type') || feature.get('drawType') || '';
+
+        return ![
+            'box_select',
+            'circle_select',
+            'polygon_select',
+            'spatial_query',
+            'route',
+            'track',
+            'draw',
+            'user_draw',
+            'measure',
+            'buffer',
+            'overlayPoint'
+        ].includes(type);
     }
 
-    function showAllowedAttractionPanels(feature) {
-        markAllowedAction();
+    function isAllowedFeatureInfoAction(target) {
+        if (!target) {
+            return false;
+        }
 
-        showAttractionInfoPanel();
+        const onclickText =
+            target.getAttribute && target.getAttribute('onclick')
+                ? target.getAttribute('onclick')
+                : '';
 
+        const text = (
+            target.innerText ||
+            target.textContent ||
+            ''
+        );
+
+        const nearbyText = (
+            target.closest('.query-section, .dropdown, .dropdown-menu, .right-panel, .card, .mb-3, .form-group')?.innerText ||
+            ''
+        );
+
+        // 景点查询允许
         if (
-            feature &&
-            typeof window.showCleanAmapWeatherForFeature === 'function'
+            onclickText.includes('queryAttraction') ||
+            target.closest('#attractionsMenu') ||
+            nearbyText.includes('景点查询')
         ) {
-            window.showCleanAmapWeatherForFeature(feature);
+            return true;
         }
+
+        // 属性查询允许
+        if (
+            onclickText.includes('searchAttractionsByAttribute') ||
+            target.id === 'attrSearchKeyword' ||
+            target.id === 'attrSearchCategory' ||
+            text.includes('属性查询') ||
+            nearbyText.includes('属性查询')
+        ) {
+            return true;
+        }
+
+        return false;
     }
 
-    window.hideAttractionWeatherAndInfo = hideAttractionWeatherAndInfo;
-    window.showAllowedAttractionPanels = showAllowedAttractionPanels;
-
-    // 1. 地图点击：只有点到真正景点才允许显示；点空白或其他图形就清除
+    // 点击地图：只有点到景点允许保留；点空白或其他图形清除
     if (typeof map !== 'undefined' && map) {
         map.on('singleclick', function (evt) {
             setTimeout(function () {
@@ -12427,123 +12420,14 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
                     return false;
                 });
 
-                if (clickedAttraction) {
-                    showAllowedAttractionPanels(clickedAttraction);
-                } else {
+                if (!clickedAttraction) {
                     hideAttractionWeatherAndInfo();
                 }
-            }, 80);
+            }, 100);
         });
     }
 
-    // 2. 景点查询 queryAttraction：允许显示
-    if (typeof window.queryAttraction === 'function') {
-        const oldQueryAttraction = window.queryAttraction;
-
-        window.queryAttraction = function (id) {
-            markAllowedAction();
-
-            const result = oldQueryAttraction.apply(this, arguments);
-
-            setTimeout(function () {
-                if (!id) {
-                    hideAttractionWeatherAndInfo();
-                    return;
-                }
-
-                showAttractionInfoPanel();
-
-                if (
-                    typeof attractionsSource !== 'undefined' &&
-                    attractionsSource
-                ) {
-                    const feature = attractionsSource.getFeatures().find(function (item) {
-                        return String(item.get('id')) === String(id);
-                    });
-
-                    if (feature) {
-                        showAllowedAttractionPanels(feature);
-                    }
-                }
-            }, 120);
-
-            return result;
-        };
-    }
-
-    // 3. 属性查询 searchAttractionsByAttribute：允许显示
-    // 属性查询有多个结果时，属性框显示列表；天气框显示第一个查询结果的城市天气
-    if (typeof window.searchAttractionsByAttribute === 'function') {
-        const oldSearchAttractionsByAttribute = window.searchAttractionsByAttribute;
-
-        window.searchAttractionsByAttribute = function () {
-            markAllowedAction();
-
-            const result = oldSearchAttractionsByAttribute.apply(this, arguments);
-
-            setTimeout(function () {
-                showAttractionInfoPanel();
-
-                if (
-                    typeof searchResultSource !== 'undefined' &&
-                    searchResultSource
-                ) {
-                    const features = searchResultSource.getFeatures();
-
-                    if (
-                        features &&
-                        features.length > 0 &&
-                        typeof window.showCleanAmapWeatherForFeature === 'function'
-                    ) {
-                        window.showCleanAmapWeatherForFeature(features[0]);
-                    }
-                }
-            }, 150);
-
-            return result;
-        };
-    }
-
-    function isAllowedControlClick(target) {
-        if (!target) {
-            return false;
-        }
-
-        const onclickText = (
-            target.getAttribute &&
-            target.getAttribute('onclick')
-        ) || '';
-
-        const aroundText = (
-            target.closest('.dropdown-menu, .dropdown, .form-group, .mb-3, .query-section, .card, .right-panel, .sidebar')?.innerText ||
-            target.innerText ||
-            target.textContent ||
-            ''
-        );
-
-        // 景点查询允许
-        if (
-            onclickText.includes('queryAttraction') ||
-            target.closest('#attractionsMenu') ||
-            aroundText.includes('景点查询')
-        ) {
-            return true;
-        }
-
-        // 属性查询允许
-        if (
-            onclickText.includes('searchAttractionsByAttribute') ||
-            target.id === 'attrSearchKeyword' ||
-            target.id === 'attrSearchCategory' ||
-            aroundText.includes('属性查询')
-        ) {
-            return true;
-        }
-
-        return false;
-    }
-
-    // 4. 点击其他功能按钮 / 菜单 / 下拉框：不是白名单就清除
+    // 点击除“地图景点 / 景点查询 / 属性查询”之外的功能，清除两个框
     document.addEventListener('click', function (event) {
         const target = event.target;
 
@@ -12551,24 +12435,23 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
             return;
         }
 
-        // 点地图交给 map.singleclick 判断
+        // 地图点击交给 map.singleclick 判断
         if (target.closest('#map')) {
             return;
         }
 
-        // 点天气框内部，不处理
+        // 点天气框自己，不清除
         if (target.closest('#weatherPanel')) {
             return;
         }
 
-        // 点属性信息框内部，不处理，例如收藏按钮、点评内容
-        if (target.closest('#featureInfo') || target.closest('#infoPanel')) {
+        // 点属性信息框自己，不清除
+        if (target.closest('#featureInfo')) {
             return;
         }
 
-        // 白名单：景点查询、属性查询
-        if (isAllowedControlClick(target)) {
-            markAllowedAction();
+        // 景点查询、属性查询是白名单，不清除
+        if (isAllowedFeatureInfoAction(target)) {
             return;
         }
 
@@ -12587,7 +12470,7 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
         }
     }, true);
 
-    // 5. 下拉框变化：只有景点查询 / 属性查询允许，其余全部清除
+    // 下拉框变化：只有景点查询 / 属性查询允许，其余清除
     document.addEventListener('change', function (event) {
         const target = event.target;
 
@@ -12597,14 +12480,12 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
 
         if (
             target.closest('#weatherPanel') ||
-            target.closest('#featureInfo') ||
-            target.closest('#infoPanel')
+            target.closest('#featureInfo')
         ) {
             return;
         }
 
-        if (isAllowedControlClick(target)) {
-            markAllowedAction();
+        if (isAllowedFeatureInfoAction(target)) {
             return;
         }
 
@@ -12616,34 +12497,5 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
         }
     }, true);
 
-    // 6. 防止旧的 featureInfo 自动弹窗逻辑把其他查询结果又弹出来
-    // 只要最近不是白名单操作，就把它压回去
-    const featureInfo = document.getElementById('featureInfo');
-
-    if (featureInfo) {
-        const observer = new MutationObserver(function () {
-            const recentlyAllowed = Date.now() - window.__lastAttractionPanelAllowedTime < 800;
-
-            if (!recentlyAllowed) {
-                setTimeout(function () {
-                    const stillNotAllowed = Date.now() - window.__lastAttractionPanelAllowedTime >= 800;
-
-                    if (stillNotAllowed) {
-                        hideAttractionWeatherAndInfo();
-                    }
-                }, 30);
-            }
-        });
-
-        observer.observe(featureInfo, {
-            childList: true,
-            subtree: true,
-            characterData: true
-        });
-    }
-
-    // 7. 页面初始默认隐藏
-    setTimeout(function () {
-        hideAttractionWeatherAndInfo();
-    }, 500);
+    window.hideAttractionWeatherAndInfo = hideAttractionWeatherAndInfo;
 })();
