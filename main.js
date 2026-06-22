@@ -1494,7 +1494,7 @@ function startBoxSelect() {
 
         alert('框选查询完成，共查询到 ' + results.length + ' 个景点。');
     
-}
+
     });
 
     // 鼠标移动时动态更新矩形预览
@@ -4726,7 +4726,7 @@ polygonSelectMoveKey = map.on('pointermove', function(evt) {
     };
 
     map.getViewport().addEventListener('contextmenu', polygonSelectRightClickHandler);
-}
+
 
 // ===== 圆选查询：第一次左键单击确定圆心，第二次左键单击确认范围 =====
 
@@ -4898,8 +4898,7 @@ function startCircleSelect() {
         clearCircleSelectListeners();
 
         alert('圆选查询完成，共查询到 ' + results.length + ' 个景点。');
-}
-    });
+});
 
     // 鼠标移动：动态预览圆形范围
     circleSelectMoveKey = map.on('pointermove', function(evt) {
@@ -12337,11 +12336,23 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
     const featureInfo = document.getElementById('featureInfo');
 
     if (featureInfo) {
+        const text = featureInfo.innerText || featureInfo.textContent || '';
+
+        if (
+            text.includes('框选查询结果') ||
+            text.includes('圆选查询结果') ||
+            text.includes('多边形查询结果') ||
+            text.includes('空间查询结果')
+        ) {
+            currentSelectedFeature = null;
+            window.currentSelectedFeature = null;
+            return;
+        }
+
         featureInfo.innerHTML = '';
         featureInfo.style.display = 'none';
     }
 
-    // 隐藏外层属性信息框，不然会只剩标题栏
     const infoPanel = document.getElementById('infoPanel');
 
     if (infoPanel) {
