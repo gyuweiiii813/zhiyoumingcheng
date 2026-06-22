@@ -11617,3 +11617,956 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
         `;
     };
 })();
+
+// =====================================================
+// 高德路线分段路况版：真实路线 + 分段颜色 + 路口步骤
+// 功能：
+// 1. 调用 AMap.Driving 获取真实道路路线
+// 2. 尽量读取高德返回的路况字段
+// 3. 没有精细路况时，按道路类型/路段速度合理推断
+// 4. OpenLayers 中按路段分色显示：绿/黄/橙/红
+// 5. 路线规划弹窗中显示路口/转向步骤
+// 请放在 main.js 最下面
+// =====================================================
+(function () {
+    if (window.__amapTrafficSegmentRouteInstalled) {
+        return;
+    }
+
+    window.__amapTrafficSegmentRouteInstalled = true;
+
+    const oldFetch = window.fetch.bind(window);
+
+    let trafficRouteSource = null;
+    let trafficRouteLayer = null;
+    let trafficStepSource = null;
+    let trafficStepLayer = null;
+
+    function makeJsonResponse(data) {
+        return Promise.resolve(
+            new Response(JSON.stringify(data), {
+                status: 200,
+                headers: {
+                    'Content-Type': 'application/json; charset=utf-8'
+                }
+            })
+        );
+    }
+
+    function getUrlParam(urlText, key) {
+        try {
+            const query = urlText.split('?')[1] || '';
+            const params = new URLSearchParams(query);
+            return params.get(key) || '';
+        } catch (e) {
+            return '';
+        }
+    }
+
+    function getFeatureName(feature) {
+        if (!feature) {
+            return '';
+        }
+
+        return (
+            feature.get('name') ||
+            feature.get('title') ||
+            feature.get('名称') ||
+            feature.get('id') ||
+            ''
+        );
+    }
+
+    function parseCoordinateText(text) {
+        if (!text) {
+            return null;
+        }
+
+        text = decodeURIComponent(String(text)).trim();
+
+        try {
+            const jsonValue = JSON.parse(text);
+
+            if (
+                Array.isArray(jsonValue) &&
+                jsonValue.length >= 2 &&
+                !isNaN(Number(jsonValue[0])) &&
+                !isNaN(Number(jsonValue[1]))
+            ) {
+                return [Number(jsonValue[0]), Number(jsonValue[1])];
+            }
+        } catch (e) {}
+
+        const match = text.match(/(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)/);
+
+        if (match) {
+            const lon = Number(match[1]);
+            const lat = Number(match[3]);
+
+            if (!isNaN(lon) && !isNaN(lat)) {
+                return [lon, lat];
+            }
+        }
+
+        return null;
+    }
+
+    function findAttractionCoordinateByName(nameText) {
+        if (!nameText || typeof attractionsSource === 'undefined' || !attractionsSource) {
+            return null;
+        }
+
+        const keyword = decodeURIComponent(String(nameText)).trim();
+
+        if (!keyword) {
+            return null;
+        }
+
+        const features = attractionsSource.getFeatures();
+
+        let foundFeature = features.find(function (feature) {
+            return getFeatureName(feature) === keyword;
+        });
+
+        if (!foundFeature) {
+            foundFeature = features.find(function (feature) {
+                const name = getFeatureName(feature);
+                return name && (name.includes(keyword) || keyword.includes(name));
+            });
+        }
+
+        if (foundFeature && foundFeature.getGeometry()) {
+            const coord = foundFeature.getGeometry().getCoordinates();
+            return [Number(coord[0]), Number(coord[1])];
+        }
+
+        return null;
+    }
+
+    function resolveRoutePoint(text) {
+        return parseCoordinateText(text) || findAttractionCoordinateByName(text);
+    }
+
+    function parseWaypoints(urlText) {
+        const waypointText =
+            getUrlParam(urlText, 'waypoints') ||
+            getUrlParam(urlText, 'waypoint') ||
+            getUrlParam(urlText, 'via') ||
+            '';
+
+        if (!waypointText) {
+            return [];
+        }
+
+        return decodeURIComponent(waypointText)
+            .split(/[;|]/)
+            .map(function (item) {
+                return resolveRoutePoint(item);
+            })
+            .filter(function (coord) {
+                return coord && coord.length >= 2;
+            });
+    }
+
+    function getLngLatFromAmapPoint(point) {
+        if (!point) {
+            return null;
+        }
+
+        if (typeof point.getLng === 'function' && typeof point.getLat === 'function') {
+            return [
+                Number(point.getLng().toFixed(6)),
+                Number(point.getLat().toFixed(6))
+            ];
+        }
+
+        if (point.lng !== undefined && point.lat !== undefined) {
+            return [
+                Number(Number(point.lng).toFixed(6)),
+                Number(Number(point.lat).toFixed(6))
+            ];
+        }
+
+        return null;
+    }
+
+    function coordsToPolyline(coords) {
+        return coords.map(function (coord) {
+            return coord[0] + ',' + coord[1];
+        }).join(';');
+    }
+
+    function parsePolyline(polyline) {
+        if (!polyline) {
+            return [];
+        }
+
+        return String(polyline)
+            .split(';')
+            .map(function (item) {
+                const parts = item.split(',');
+                return [Number(parts[0]), Number(parts[1])];
+            })
+            .filter(function (coord) {
+                return !isNaN(coord[0]) && !isNaN(coord[1]);
+            });
+    }
+
+    function calculateDistanceMeters(coord1, coord2) {
+        if (
+            typeof ol !== 'undefined' &&
+            ol.sphere &&
+            typeof ol.sphere.getDistance === 'function'
+        ) {
+            return ol.sphere.getDistance(coord1, coord2);
+        }
+
+        const dx = coord1[0] - coord2[0];
+        const dy = coord1[1] - coord2[1];
+
+        return Math.sqrt(dx * dx + dy * dy) * 111000;
+    }
+
+    function getTrafficStyle(statusText) {
+        if (!statusText) {
+            statusText = '畅通';
+        }
+
+        statusText = String(statusText);
+
+        if (statusText.includes('严重') || statusText.includes('重度')) {
+            return {
+                text: '严重拥堵',
+                color: '#d50000',
+                className: 'heavy-jam'
+            };
+        }
+
+        if (statusText.includes('拥堵') || statusText.includes('堵')) {
+            return {
+                text: '拥堵',
+                color: '#ff6d00',
+                className: 'jam'
+            };
+        }
+
+        if (statusText.includes('缓') || statusText.includes('慢')) {
+            return {
+                text: '缓行',
+                color: '#ffd600',
+                className: 'slow'
+            };
+        }
+
+        return {
+            text: '畅通',
+            color: '#00c853',
+            className: 'smooth'
+        };
+    }
+
+    function inferTrafficStatus(step, index, totalSteps) {
+        const road = step.road || step.name || '';
+        const instruction = step.instruction || '';
+
+        const distance = Number(step.distance || 0);
+        const time = Number(step.time || step.duration || 0);
+
+        let speedKmh = 35;
+
+        if (distance > 0 && time > 0) {
+            speedKmh = distance / time * 3.6;
+        }
+
+        // 高速、快速路一般更畅通
+        if (
+            road.includes('高速') ||
+            road.includes('快速') ||
+            road.includes('环线') ||
+            road.includes('高架')
+        ) {
+            if (speedKmh >= 35) {
+                return '畅通';
+            }
+
+            if (speedKmh >= 25) {
+                return '缓行';
+            }
+
+            return '拥堵';
+        }
+
+        // 起步和到达附近更容易拥堵
+        if (index <= 1 || index >= totalSteps - 2) {
+            if (speedKmh >= 28) {
+                return '缓行';
+            }
+
+            if (speedKmh >= 18) {
+                return '拥堵';
+            }
+
+            return '严重拥堵';
+        }
+
+        // 有转向、路口、进入街道的地方更可能慢
+        if (
+            instruction.includes('左转') ||
+            instruction.includes('右转') ||
+            instruction.includes('掉头') ||
+            instruction.includes('路口') ||
+            instruction.includes('进入')
+        ) {
+            if (speedKmh >= 30) {
+                return '缓行';
+            }
+
+            return '拥堵';
+        }
+
+        if (speedKmh >= 45) {
+            return '畅通';
+        }
+
+        if (speedKmh >= 28) {
+            return '缓行';
+        }
+
+        if (speedKmh >= 15) {
+            return '拥堵';
+        }
+
+        return '严重拥堵';
+    }
+
+    function getStepCoords(step) {
+        const coords = [];
+
+        if (step.path && step.path.length) {
+            step.path.forEach(function (point) {
+                const coord = getLngLatFromAmapPoint(point);
+                if (coord) {
+                    coords.push(coord);
+                }
+            });
+        }
+
+        if (coords.length === 0 && step.polyline) {
+            return parsePolyline(step.polyline);
+        }
+
+        return coords;
+    }
+
+    function extractTrafficSegmentsFromStep(step, stepIndex, totalSteps) {
+        const segments = [];
+
+        // 情况一：高德返回了 tmcs，优先使用真实分段路况
+        if (Array.isArray(step.tmcs) && step.tmcs.length > 0) {
+            step.tmcs.forEach(function (tmc) {
+                const coords = parsePolyline(tmc.polyline || tmc.path || '');
+
+                if (coords.length >= 2) {
+                    const traffic = getTrafficStyle(tmc.status || tmc.statusText || tmc.traffic_status || '');
+
+                    segments.push({
+                        coords: coords,
+                        trafficText: traffic.text,
+                        trafficColor: traffic.color,
+                        trafficClass: traffic.className,
+                        road: tmc.road || step.road || '',
+                        instruction: step.instruction || ''
+                    });
+                }
+            });
+
+            if (segments.length > 0) {
+                return segments;
+            }
+        }
+
+        // 情况二：没有 tmcs，就按 step 推断该路段路况
+        const stepCoords = getStepCoords(step);
+
+        if (stepCoords.length >= 2) {
+            const statusText = step.traffic_status || step.trafficStatus || inferTrafficStatus(step, stepIndex, totalSteps);
+            const traffic = getTrafficStyle(statusText);
+
+            segments.push({
+                coords: stepCoords,
+                trafficText: traffic.text,
+                trafficColor: traffic.color,
+                trafficClass: traffic.className,
+                road: step.road || '',
+                instruction: step.instruction || ''
+            });
+        }
+
+        return segments;
+    }
+
+    function buildRouteResponseFromAmap(start, end, waypoints, amapResult) {
+        const route = amapResult.routes[0];
+        const steps = route.steps || [];
+
+        const allCoords = [];
+        const trafficSegments = [];
+        const instructionSteps = [];
+
+        steps.forEach(function (step, index) {
+            const stepCoords = getStepCoords(step);
+
+            stepCoords.forEach(function (coord) {
+                allCoords.push(coord);
+            });
+
+            const stepSegments = extractTrafficSegmentsFromStep(step, index, steps.length);
+
+            stepSegments.forEach(function (segment) {
+                trafficSegments.push(segment);
+            });
+
+            const startCoord = stepCoords[0] || null;
+            const endCoord = stepCoords[stepCoords.length - 1] || null;
+
+            instructionSteps.push({
+                index: index + 1,
+                instruction: step.instruction || step.road || '继续前行',
+                road: step.road || '',
+                action: step.action || '',
+                assistantAction: step.assistant_action || step.assistantAction || '',
+                distance: Number(step.distance || 0),
+                duration: Number(step.time || step.duration || 0),
+                startCoord: startCoord,
+                endCoord: endCoord,
+                trafficText: stepSegments[0] ? stepSegments[0].trafficText : '畅通',
+                trafficColor: stepSegments[0] ? stepSegments[0].trafficColor : '#00c853'
+            });
+        });
+
+        if (allCoords.length < 2) {
+            return createFallbackRoute(start, end, waypoints);
+        }
+
+        allCoords[0] = [
+            Number(start[0].toFixed(6)),
+            Number(start[1].toFixed(6))
+        ];
+
+        allCoords[allCoords.length - 1] = [
+            Number(end[0].toFixed(6)),
+            Number(end[1].toFixed(6))
+        ];
+
+        if (trafficSegments.length > 0) {
+            trafficSegments[0].coords[0] = [
+                Number(start[0].toFixed(6)),
+                Number(start[1].toFixed(6))
+            ];
+
+            trafficSegments[trafficSegments.length - 1].coords[
+                trafficSegments[trafficSegments.length - 1].coords.length - 1
+            ] = [
+                Number(end[0].toFixed(6)),
+                Number(end[1].toFixed(6))
+            ];
+        }
+
+        const trafficSummary = buildTrafficSummary(trafficSegments, route.distance || 0, route.time || 0);
+
+        const result = {
+            status: '1',
+            info: '高德真实道路路线：分段路况版',
+            route: {
+                paths: [
+                    {
+                        distance: String(route.distance || 0),
+                        duration: String(route.time || 0),
+                        trafficSummary: trafficSummary,
+                        trafficSegments: trafficSegments,
+                        instructionSteps: instructionSteps,
+                        steps: [
+                            {
+                                road: '高德真实道路路线',
+                                instruction: '高德真实道路路线',
+                                polyline: coordsToPolyline(allCoords),
+                                trafficSegments: trafficSegments,
+                                instructionSteps: instructionSteps
+                            }
+                        ]
+                    }
+                ]
+            }
+        };
+
+        return result;
+    }
+
+    function buildTrafficSummary(segments, distance, duration) {
+        const countMap = {
+            '畅通': 0,
+            '缓行': 0,
+            '拥堵': 0,
+            '严重拥堵': 0
+        };
+
+        segments.forEach(function (segment) {
+            if (countMap[segment.trafficText] !== undefined) {
+                countMap[segment.trafficText]++;
+            }
+        });
+
+        let mainStatus = '畅通';
+
+        if (countMap['严重拥堵'] > 0) {
+            mainStatus = '严重拥堵';
+        } else if (countMap['拥堵'] > 0) {
+            mainStatus = '拥堵';
+        } else if (countMap['缓行'] > 0) {
+            mainStatus = '缓行';
+        }
+
+        const style = getTrafficStyle(mainStatus);
+
+        let speedKmh = 0;
+
+        if (Number(distance) > 0 && Number(duration) > 0) {
+            speedKmh = Number(distance) / Number(duration) * 3.6;
+        }
+
+        return {
+            statusText: mainStatus,
+            color: style.color,
+            averageSpeed: Math.round(speedKmh || 35),
+            segmentCount: segments.length,
+            smoothCount: countMap['畅通'],
+            slowCount: countMap['缓行'],
+            jamCount: countMap['拥堵'],
+            heavyJamCount: countMap['严重拥堵']
+        };
+    }
+
+    function createFallbackRoute(start, end, waypoints) {
+        const points = [start].concat(waypoints || []).concat([end]);
+
+        let coords = [];
+
+        for (let i = 0; i < points.length - 1; i++) {
+            const part = [];
+
+            for (let j = 0; j <= 40; j++) {
+                const t = j / 40;
+
+                part.push([
+                    Number((points[i][0] + (points[i + 1][0] - points[i][0]) * t).toFixed(6)),
+                    Number((points[i][1] + (points[i + 1][1] - points[i][1]) * t).toFixed(6))
+                ]);
+            }
+
+            if (i > 0) {
+                part.shift();
+            }
+
+            coords = coords.concat(part);
+        }
+
+        const segmentList = [];
+
+        for (let i = 0; i < points.length - 1; i++) {
+            const style = getTrafficStyle(i === 0 ? '缓行' : '畅通');
+
+            segmentList.push({
+                coords: [points[i], points[i + 1]],
+                trafficText: style.text,
+                trafficColor: style.color,
+                trafficClass: style.className,
+                road: '兜底路线',
+                instruction: '继续前行'
+            });
+        }
+
+        coords[0] = [
+            Number(start[0].toFixed(6)),
+            Number(start[1].toFixed(6))
+        ];
+
+        coords[coords.length - 1] = [
+            Number(end[0].toFixed(6)),
+            Number(end[1].toFixed(6))
+        ];
+
+        let totalDistance = 0;
+
+        for (let i = 0; i < points.length - 1; i++) {
+            totalDistance += calculateDistanceMeters(points[i], points[i + 1]);
+        }
+
+        return {
+            status: '1',
+            info: '高德路线失败，使用兜底路线',
+            route: {
+                paths: [
+                    {
+                        distance: String(Math.round(totalDistance)),
+                        duration: String(Math.round(Math.max(1200, totalDistance / 4))),
+                        trafficSummary: buildTrafficSummary(segmentList, totalDistance, Math.max(1200, totalDistance / 4)),
+                        trafficSegments: segmentList,
+                        instructionSteps: [],
+                        steps: [
+                            {
+                                road: '静态兜底路线',
+                                instruction: '静态兜底路线',
+                                polyline: coordsToPolyline(coords),
+                                trafficSegments: segmentList,
+                                instructionSteps: []
+                            }
+                        ]
+                    }
+                ]
+            }
+        };
+    }
+
+    function requestAmapDrivingRouteWithTraffic(start, end, waypoints) {
+        return new Promise(function (resolve) {
+            if (!window.AMap || !AMap.Driving) {
+                console.warn('高德 AMap.Driving 未加载，使用兜底路线。');
+                resolve(createFallbackRoute(start, end, waypoints));
+                return;
+            }
+
+            AMap.plugin('AMap.Driving', function () {
+                const driving = new AMap.Driving({
+                    policy: AMap.DrivingPolicy.LEAST_TIME,
+                    showTraffic: true,
+                    extensions: 'all'
+                });
+
+                const origin = new AMap.LngLat(start[0], start[1]);
+                const destination = new AMap.LngLat(end[0], end[1]);
+
+                const options = {};
+
+                if (waypoints && waypoints.length > 0) {
+                    options.waypoints = waypoints.map(function (coord) {
+                        return new AMap.LngLat(coord[0], coord[1]);
+                    });
+                }
+
+                driving.search(origin, destination, options, function (status, result) {
+                    if (
+                        status !== 'complete' ||
+                        !result ||
+                        !result.routes ||
+                        result.routes.length === 0
+                    ) {
+                        console.warn('高德路线规划失败，使用兜底路线：', status, result);
+                        resolve(createFallbackRoute(start, end, waypoints));
+                        return;
+                    }
+
+                    const routeData = buildRouteResponseFromAmap(start, end, waypoints, result);
+                    resolve(routeData);
+                });
+            });
+        });
+    }
+
+    function createAmapTrafficRouteResponse(urlText) {
+        const originText =
+            getUrlParam(urlText, 'origin') ||
+            getUrlParam(urlText, 'start') ||
+            getUrlParam(urlText, 'from') ||
+            '';
+
+        const destinationText =
+            getUrlParam(urlText, 'destination') ||
+            getUrlParam(urlText, 'end') ||
+            getUrlParam(urlText, 'to') ||
+            '';
+
+        const start = resolveRoutePoint(originText);
+        const end = resolveRoutePoint(destinationText);
+        const waypoints = parseWaypoints(urlText);
+
+        if (!start || !end) {
+            return Promise.resolve({
+                status: '0',
+                info: '路线起点或终点解析失败，请重新选择景点'
+            });
+        }
+
+        return requestAmapDrivingRouteWithTraffic(start, end, waypoints);
+    }
+
+    function ensureTrafficRouteLayer() {
+        if (trafficRouteLayer && trafficRouteSource) {
+            return;
+        }
+
+        trafficRouteSource = new ol.source.Vector();
+
+        trafficRouteLayer = new ol.layer.Vector({
+            source: trafficRouteSource,
+            zIndex: 2500,
+            style: function (feature) {
+                return new ol.style.Style({
+                    stroke: new ol.style.Stroke({
+                        color: feature.get('trafficColor') || '#00c853',
+                        width: 7
+                    })
+                });
+            }
+        });
+
+        map.addLayer(trafficRouteLayer);
+
+        trafficStepSource = new ol.source.Vector();
+
+        trafficStepLayer = new ol.layer.Vector({
+            source: trafficStepSource,
+            zIndex: 2600,
+            style: function (feature) {
+                const index = feature.get('index') || '';
+
+                return new ol.style.Style({
+                    image: new ol.style.Circle({
+                        radius: 8,
+                        fill: new ol.style.Fill({
+                            color: feature.get('trafficColor') || '#00c853'
+                        }),
+                        stroke: new ol.style.Stroke({
+                            color: '#ffffff',
+                            width: 2
+                        })
+                    }),
+                    text: new ol.style.Text({
+                        text: String(index),
+                        fill: new ol.style.Fill({
+                            color: '#ffffff'
+                        }),
+                        font: 'bold 11px sans-serif',
+                        offsetY: 1
+                    })
+                });
+            }
+        });
+
+        map.addLayer(trafficStepLayer);
+    }
+
+    function drawTrafficRoute(routeData) {
+        if (
+            typeof map === 'undefined' ||
+            typeof ol === 'undefined' ||
+            !routeData ||
+            !routeData.route ||
+            !routeData.route.paths ||
+            !routeData.route.paths.length
+        ) {
+            return;
+        }
+
+        ensureTrafficRouteLayer();
+
+        trafficRouteSource.clear();
+        trafficStepSource.clear();
+
+        const path = routeData.route.paths[0];
+        const segments = path.trafficSegments || [];
+        const instructions = path.instructionSteps || [];
+
+        segments.forEach(function (segment) {
+            if (!segment.coords || segment.coords.length < 2) {
+                return;
+            }
+
+            const lineFeature = new ol.Feature({
+                geometry: new ol.geom.LineString(segment.coords),
+                trafficText: segment.trafficText,
+                trafficColor: segment.trafficColor,
+                road: segment.road,
+                instruction: segment.instruction
+            });
+
+            trafficRouteSource.addFeature(lineFeature);
+        });
+
+        instructions.forEach(function (item) {
+            if (!item.endCoord) {
+                return;
+            }
+
+            const pointFeature = new ol.Feature({
+                geometry: new ol.geom.Point(item.endCoord),
+                index: item.index,
+                instruction: item.instruction,
+                road: item.road,
+                trafficText: item.trafficText,
+                trafficColor: item.trafficColor
+            });
+
+            trafficStepSource.addFeature(pointFeature);
+        });
+
+        if (trafficRouteSource.getFeatures().length > 0) {
+            const extent = trafficRouteSource.getExtent();
+
+            map.getView().fit(extent, {
+                padding: [80, 420, 80, 320],
+                duration: 600,
+                maxZoom: 13
+            });
+        }
+    }
+
+    function insertRouteInstructionPanel(routeData) {
+        const routeModal = document.getElementById('routeModal');
+
+        if (
+            !routeModal ||
+            !routeData ||
+            !routeData.route ||
+            !routeData.route.paths ||
+            !routeData.route.paths.length
+        ) {
+            return;
+        }
+
+        const path = routeData.route.paths[0];
+        const summary = path.trafficSummary || null;
+        const instructions = path.instructionSteps || [];
+
+        let panel = document.getElementById('amapRouteInstructionPanel');
+
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.id = 'amapRouteInstructionPanel';
+
+            panel.style.marginTop = '10px';
+            panel.style.padding = '10px';
+            panel.style.background = '#fff';
+            panel.style.border = '1px solid #eee';
+            panel.style.borderRadius = '8px';
+            panel.style.maxHeight = '180px';
+            panel.style.overflowY = 'auto';
+            panel.style.fontSize = '13px';
+
+            const routeBody =
+                routeModal.querySelector('.modal-body') ||
+                routeModal.querySelector('.route-result') ||
+                routeModal;
+
+            routeBody.appendChild(panel);
+        }
+
+        let html = '';
+
+        if (summary) {
+            html += `
+                <div style="font-weight:bold;margin-bottom:8px;color:#333;">
+                    实时路况：
+                    <span style="color:${summary.color};">
+                        ${summary.statusText}
+                    </span>
+                    <span style="font-weight:normal;color:#666;">
+                        （畅通 ${summary.smoothCount} 段，缓行 ${summary.slowCount} 段，拥堵 ${summary.jamCount} 段，严重拥堵 ${summary.heavyJamCount} 段）
+                    </span>
+                </div>
+            `;
+        }
+
+        html += `
+            <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;font-size:12px;">
+                <span><i style="display:inline-block;width:18px;height:5px;background:#00c853;"></i> 畅通</span>
+                <span><i style="display:inline-block;width:18px;height:5px;background:#ffd600;"></i> 缓行</span>
+                <span><i style="display:inline-block;width:18px;height:5px;background:#ff6d00;"></i> 拥堵</span>
+                <span><i style="display:inline-block;width:18px;height:5px;background:#d50000;"></i> 严重拥堵</span>
+            </div>
+        `;
+
+        if (instructions.length > 0) {
+            html += `<div style="font-weight:bold;margin-bottom:6px;">路口 / 转向步骤</div>`;
+
+            instructions.slice(0, 12).forEach(function (item) {
+                html += `
+                    <div style="border-top:1px dashed #ddd;padding:6px 0;">
+                        <span style="display:inline-block;width:20px;height:20px;line-height:20px;text-align:center;border-radius:50%;background:${item.trafficColor};color:#fff;font-size:12px;margin-right:6px;">
+                            ${item.index}
+                        </span>
+                        <span>${item.instruction}</span>
+                        <span style="float:right;color:${item.trafficColor};font-weight:bold;">${item.trafficText}</span>
+                    </div>
+                `;
+            });
+
+            if (instructions.length > 12) {
+                html += `
+                    <div style="font-size:12px;color:#888;margin-top:5px;">
+                        仅显示前 12 个路口步骤，共 ${instructions.length} 个步骤。
+                    </div>
+                `;
+            }
+        } else {
+            html += `<div style="color:#888;">暂无详细路口步骤。</div>`;
+        }
+
+        panel.innerHTML = html;
+    }
+
+    // 最终接管 /api/route
+    window.fetch = function (input, init) {
+        const urlText = typeof input === 'string'
+            ? input
+            : input && input.url
+                ? input.url
+                : '';
+
+        const lowerUrl = urlText.toLowerCase();
+
+        if (lowerUrl.includes('api/route')) {
+            return createAmapTrafficRouteResponse(urlText).then(function (routeData) {
+                setTimeout(function () {
+                    drawTrafficRoute(routeData);
+                    insertRouteInstructionPanel(routeData);
+                }, 500);
+
+                setTimeout(function () {
+                    drawTrafficRoute(routeData);
+                    insertRouteInstructionPanel(routeData);
+                }, 1200);
+
+                return makeJsonResponse(routeData);
+            });
+        }
+
+        return oldFetch(input, init);
+    };
+
+    window.clearAmapTrafficRoute = function () {
+        if (trafficRouteSource) {
+            trafficRouteSource.clear();
+        }
+
+        if (trafficStepSource) {
+            trafficStepSource.clear();
+        }
+
+        const panel = document.getElementById('amapRouteInstructionPanel');
+
+        if (panel) {
+            panel.remove();
+        }
+    };
+
+    // 如果你的清除路线按钮调用 clearRoute，也顺便清除彩色路况层
+    const oldClearRoute = window.clearRoute;
+
+    window.clearRoute = function () {
+        if (typeof oldClearRoute === 'function') {
+            oldClearRoute();
+        }
+
+        window.clearAmapTrafficRoute();
+    };
+})();
