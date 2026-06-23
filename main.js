@@ -1787,6 +1787,26 @@ let trackDrawInteraction = null;
 let currentTrackPoints = [];
 
 function startTrackDraw() {
+    // 再次点击“模拟轨迹”时，先清除上一次地图上留下的轨迹
+    if (trackAnimation) {
+        cancelAnimationFrame(trackAnimation);
+        trackAnimation = null;
+    }
+
+    if (typeof trackSource !== 'undefined' && trackSource) {
+        trackSource.clear();
+    }
+
+    if (typeof trackMarkerSource !== 'undefined' && trackMarkerSource) {
+        trackMarkerSource.clear();
+    }
+
+    currentTrackPoints = [];
+
+    // 防止路线规划的路况图层残留
+    if (typeof window.clearAmapTrafficRoute === 'function') {
+        window.clearAmapTrafficRoute();
+    }
     if (trackDrawInteraction) {
         map.removeInteraction(trackDrawInteraction);
         trackDrawInteraction = null;
@@ -2160,8 +2180,7 @@ function playTrackAnimation(points) {
     
     let currentIndex = 0;
     let progress = 0;
-    const speed = 2.5;
-    
+    const speed = 0.08;    
     function animate() {
         if (currentIndex >= points.length - 1) {
             return;
@@ -12880,5 +12899,505 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
         }
 
         clearBufferAnalysisFeatures();
+    };
+})();
+
+// =====================================================
+// 模拟轨迹最终修复版
+// 作用：
+// 1. 再次点击“模拟轨迹”时，自动清除上一次地图上的轨迹
+// 2. 模拟轨迹直接调用高德 AMap.Driving 获取道路轨迹，不再走 /api/route
+// 3. 生成轨迹后不自动播放
+// 4. 点击“播放轨迹”时，按 起点 → 途经点 → 终点 慢速播放
+// =====================================================
+(function () {
+    if (window.__finalSimTrackPatchInstalled) {
+        return;
+    }
+
+    window.__finalSimTrackPatchInstalled = true;
+
+    function clearCurrentTrackOnMap() {
+        if (typeof trackAnimation !== 'undefined' && trackAnimation) {
+            cancelAnimationFrame(trackAnimation);
+            trackAnimation = null;
+        }
+
+        if (typeof trackSource !== 'undefined' && trackSource) {
+            trackSource.clear();
+        }
+
+        if (typeof trackMarkerSource !== 'undefined' && trackMarkerSource) {
+            trackMarkerSource.clear();
+        }
+
+        if (typeof currentTrackPoints !== 'undefined') {
+            currentTrackPoints = [];
+        }
+
+        // 防止路线规划的彩色路况线残留
+        if (typeof window.clearAmapTrafficRoute === 'function') {
+            window.clearAmapTrafficRoute();
+        }
+    }
+
+    function parseTrackCoord(value) {
+        if (!value) {
+            return null;
+        }
+
+        const text = String(value).trim();
+
+        // 情况1：[113.1,23.1]
+        try {
+            const parsed = JSON.parse(text);
+
+            if (
+                Array.isArray(parsed) &&
+                parsed.length >= 2 &&
+                !isNaN(Number(parsed[0])) &&
+                !isNaN(Number(parsed[1]))
+            ) {
+                return [Number(parsed[0]), Number(parsed[1])];
+            }
+        } catch (e) {}
+
+        // 情况2：113.1,23.1
+        const match = text.match(/(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)/);
+
+        if (match) {
+            return [Number(match[1]), Number(match[3])];
+        }
+
+        // 情况3：下拉框 value 是景点名称
+        if (typeof attractionsSource !== 'undefined' && attractionsSource) {
+            const features = attractionsSource.getFeatures();
+
+            const found = features.find(function (feature) {
+                const name =
+                    feature.get('name') ||
+                    feature.get('title') ||
+                    feature.get('名称') ||
+                    '';
+
+                return name === text || name.includes(text) || text.includes(name);
+            });
+
+            if (found && found.getGeometry()) {
+                const coord = found.getGeometry().getCoordinates();
+                return [Number(coord[0]), Number(coord[1])];
+            }
+        }
+
+        return null;
+    }
+
+    function createFallbackSegment(start, end) {
+        const coords = [];
+        const count = 50;
+
+        const dx = end[0] - start[0];
+        const dy = end[1] - start[1];
+
+        for (let i = 0; i <= count; i++) {
+            const t = i / count;
+
+            let lon = start[0] + dx * t;
+            let lat = start[1] + dy * t;
+
+            // 兜底时也不要完全直线，稍微弯曲
+            const curve = Math.sin(Math.PI * t) * 0.035;
+            lon += -dy * curve;
+            lat += dx * curve;
+
+            coords.push([
+                Number(lon.toFixed(6)),
+                Number(lat.toFixed(6))
+            ]);
+        }
+
+        return coords;
+    }
+
+    function extractCoordsFromAmapDriving(result) {
+        const coords = [];
+
+        const route =
+            result &&
+            result.routes &&
+            result.routes.length > 0
+                ? result.routes[0]
+                : null;
+
+        if (!route || !route.steps) {
+            return coords;
+        }
+
+        route.steps.forEach(function (step) {
+            // AMap JSAPI 通常是 step.path
+            if (step.path && step.path.length > 0) {
+                step.path.forEach(function (point) {
+                    let lon = null;
+                    let lat = null;
+
+                    if (point && typeof point.getLng === 'function') {
+                        lon = point.getLng();
+                        lat = point.getLat();
+                    } else if (point) {
+                        lon = point.lng;
+                        lat = point.lat;
+                    }
+
+                    if (lon != null && lat != null) {
+                        coords.push([Number(lon), Number(lat)]);
+                    }
+                });
+            }
+
+            // 兜底兼容 polyline 字符串
+            if (step.polyline) {
+                step.polyline.split(';').forEach(function (item) {
+                    const parts = item.split(',');
+
+                    if (parts.length === 2) {
+                        const lon = parseFloat(parts[0]);
+                        const lat = parseFloat(parts[1]);
+
+                        if (!isNaN(lon) && !isNaN(lat)) {
+                            coords.push([lon, lat]);
+                        }
+                    }
+                });
+            }
+        });
+
+        return coords;
+    }
+
+    function getAmapTrackSegment(start, end) {
+        return new Promise(function (resolve) {
+            if (
+                typeof AMap === 'undefined' ||
+                typeof AMap.Driving === 'undefined'
+            ) {
+                resolve(createFallbackSegment(start, end));
+                return;
+            }
+
+            const driving = new AMap.Driving({
+                showTraffic: false,
+                hideMarkers: true
+            });
+
+            const amapStart = new AMap.LngLat(start[0], start[1]);
+            const amapEnd = new AMap.LngLat(end[0], end[1]);
+
+            driving.search(amapStart, amapEnd, function (status, result) {
+                if (status !== 'complete') {
+                    console.warn('高德轨迹获取失败，使用兜底模拟轨迹：', result);
+                    resolve(createFallbackSegment(start, end));
+                    return;
+                }
+
+                const coords = extractCoordsFromAmapDriving(result);
+
+                if (coords.length < 2) {
+                    resolve(createFallbackSegment(start, end));
+                    return;
+                }
+
+                resolve(coords);
+            });
+        });
+    }
+
+    function addTrackPointMarker(coord, text, color) {
+        const marker = new ol.Feature({
+            geometry: new ol.geom.Point(coord)
+        });
+
+        marker.setStyle(new ol.style.Style({
+            image: new ol.style.Circle({
+                radius: 9,
+                fill: new ol.style.Fill({
+                    color: color
+                }),
+                stroke: new ol.style.Stroke({
+                    color: '#ffffff',
+                    width: 3
+                })
+            }),
+            text: new ol.style.Text({
+                text: text,
+                font: 'bold 12px Microsoft YaHei',
+                fill: new ol.style.Fill({
+                    color: '#ffffff'
+                })
+            })
+        }));
+
+        trackMarkerSource.addFeature(marker);
+    }
+
+    // 覆盖原来的“模拟轨迹”按钮入口
+    const oldStartTrackDraw = window.startTrackDraw;
+
+    window.startTrackDraw = function () {
+        // 再次点击模拟轨迹时，先清除上一次地图上的轨迹
+        clearCurrentTrackOnMap();
+
+        if (typeof oldStartTrackDraw === 'function') {
+            oldStartTrackDraw();
+        }
+    };
+
+    // 覆盖原来的确认模拟轨迹函数
+    window.confirmTrackSelection = function () {
+        clearCurrentTrackOnMap();
+
+        const originSelect = document.getElementById('trackOrigin');
+        const waypointsSelect = document.getElementById('trackWaypoints');
+        const destinationSelect = document.getElementById('trackDestination');
+
+        if (!originSelect || !destinationSelect) {
+            alert('没有找到模拟轨迹的起点或终点选择框。');
+            return;
+        }
+
+        const originCoord = parseTrackCoord(originSelect.value);
+        const destCoord = parseTrackCoord(destinationSelect.value);
+
+        if (!originCoord) {
+            alert('请选择有效起点。');
+            return;
+        }
+
+        if (!destCoord) {
+            alert('请选择有效终点。');
+            return;
+        }
+
+        const waypointCoords = waypointsSelect
+            ? Array.from(waypointsSelect.selectedOptions)
+                .map(function (option) {
+                    return parseTrackCoord(option.value);
+                })
+                .filter(function (coord) {
+                    return !!coord;
+                })
+            : [];
+
+        const allPoints = [originCoord].concat(waypointCoords).concat([destCoord]);
+
+        const modalBody = document.querySelector('#trackModal .modal-body');
+        const oldLoading = document.getElementById('trackLoadingMsg');
+
+        if (oldLoading) {
+            oldLoading.remove();
+        }
+
+        const loadingMsg = document.createElement('div');
+        loadingMsg.className = 'alert alert-info';
+        loadingMsg.id = 'trackLoadingMsg';
+        loadingMsg.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 正在调用高德路线生成模拟轨迹，请稍候...';
+
+        if (modalBody) {
+            modalBody.appendChild(loadingMsg);
+        }
+
+        const tasks = [];
+
+        for (let i = 0; i < allPoints.length - 1; i++) {
+            tasks.push(getAmapTrackSegment(allPoints[i], allPoints[i + 1]));
+        }
+
+        Promise.all(tasks)
+            .then(function (segments) {
+                const loadingEl = document.getElementById('trackLoadingMsg');
+
+                if (loadingEl) {
+                    loadingEl.remove();
+                }
+
+                let routeCoords = [];
+
+                segments.forEach(function (coords, index) {
+                    if (coords.length > 0) {
+                        if (index > 0 && routeCoords.length > 0) {
+                            routeCoords.pop();
+                        }
+
+                        routeCoords = routeCoords.concat(coords);
+                    }
+                });
+
+                if (routeCoords.length < 2) {
+                    alert('模拟轨迹生成失败。');
+                    return;
+                }
+
+                currentTrackPoints = routeCoords;
+
+                const lineFeature = new ol.Feature({
+                    geometry: new ol.geom.LineString(routeCoords)
+                });
+
+                lineFeature.setProperties({
+                    type: 'simulated_track',
+                    name: '模拟轨迹'
+                });
+
+                lineFeature.setStyle(new ol.style.Style({
+                    stroke: new ol.style.Stroke({
+                        color: '#e91e63',
+                        width: 4,
+                        lineDash: [10, 6]
+                    })
+                }));
+
+                trackSource.addFeature(lineFeature);
+
+                addTrackPointMarker(originCoord, '起', '#4CAF50');
+
+                waypointCoords.forEach(function (coord, index) {
+                    addTrackPointMarker(coord, String(index + 1), '#FF9800');
+                });
+
+                addTrackPointMarker(destCoord, '终', '#F44336');
+
+                const extent = trackSource.getExtent();
+
+                if (!ol.extent.isEmpty(extent)) {
+                    map.getView().fit(extent, {
+                        padding: [80, 420, 80, 80],
+                        duration: 500,
+                        maxZoom: 12
+                    });
+                }
+
+                const trackModalEl = document.getElementById('trackModal');
+                const trackModal = trackModalEl
+                    ? bootstrap.Modal.getInstance(trackModalEl)
+                    : null;
+
+                if (trackModal) {
+                    trackModal.hide();
+                }
+
+                const originName = originSelect.options[originSelect.selectedIndex]?.text || '起点';
+                const destName = destinationSelect.options[destinationSelect.selectedIndex]?.text || '终点';
+
+                savedTracks.push({
+                    name: originName + ' → ' + destName,
+                    points: routeCoords
+                });
+
+                alert('模拟轨迹已生成。如需播放，请点击“播放轨迹”。');
+            })
+            .catch(function (err) {
+                const loadingEl = document.getElementById('trackLoadingMsg');
+
+                if (loadingEl) {
+                    loadingEl.remove();
+                }
+
+                console.error('模拟轨迹生成失败：', err);
+                alert('模拟轨迹生成失败，请稍后重试。');
+            });
+    };
+
+    // 覆盖播放函数：速度变慢，按轨迹点顺序播放
+    window.playTrackAnimation = function (points) {
+        if (!points || points.length < 2) {
+            alert('轨迹点不足');
+            return;
+        }
+
+        if (trackAnimation) {
+            cancelAnimationFrame(trackAnimation);
+            trackAnimation = null;
+        }
+
+        trackMarkerSource.clear();
+
+        let currentIndex = 0;
+        let progress = 0;
+
+        // 数值越小越慢
+        const speed = 0.08;
+
+        function animate() {
+            if (currentIndex >= points.length - 1) {
+                return;
+            }
+
+            const startPoint = points[currentIndex];
+            const endPoint = points[currentIndex + 1];
+
+            progress += speed;
+
+            if (progress >= 1) {
+                progress = 0;
+                currentIndex++;
+
+                if (currentIndex >= points.length - 1) {
+                    const endMarker = new ol.Feature({
+                        geometry: new ol.geom.Point(points[points.length - 1])
+                    });
+
+                    endMarker.setStyle(new ol.style.Style({
+                        image: new ol.style.Circle({
+                            radius: 10,
+                            fill: new ol.style.Fill({
+                                color: '#F44336'
+                            }),
+                            stroke: new ol.style.Stroke({
+                                color: '#ffffff',
+                                width: 3
+                            })
+                        }),
+                        text: new ol.style.Text({
+                            text: '终',
+                            font: 'bold 12px Microsoft YaHei',
+                            fill: new ol.style.Fill({
+                                color: '#ffffff'
+                            })
+                        })
+                    }));
+
+                    trackMarkerSource.clear();
+                    trackMarkerSource.addFeature(endMarker);
+                    return;
+                }
+            }
+
+            const currentX = startPoint[0] + (endPoint[0] - startPoint[0]) * progress;
+            const currentY = startPoint[1] + (endPoint[1] - startPoint[1]) * progress;
+
+            trackMarkerSource.clear();
+
+            const markerFeature = new ol.Feature({
+                geometry: new ol.geom.Point([currentX, currentY])
+            });
+
+            markerFeature.setStyle(new ol.style.Style({
+                image: new ol.style.Circle({
+                    radius: 9,
+                    fill: new ol.style.Fill({
+                        color: '#e91e63'
+                    }),
+                    stroke: new ol.style.Stroke({
+                        color: '#ffffff',
+                        width: 3
+                    })
+                })
+            }));
+
+            trackMarkerSource.addFeature(markerFeature);
+
+            trackAnimation = requestAnimationFrame(animate);
+        }
+
+        animate();
     };
 })();
