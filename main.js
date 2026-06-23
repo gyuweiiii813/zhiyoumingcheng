@@ -13455,7 +13455,7 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
         let progress = 0;
 
         
-        const speed = 2;
+        const speed = 3;
 
         const movingStyle = createMovingLocationIcon();
 
