@@ -4548,11 +4548,13 @@ let polygonSelectPoints = [];
 let polygonSelectFeature = null;
 let polygonSelectClickKey = null;
 let polygonSelectMoveKey = null;
-let polygonSelectRightClickHandler = null;
+let polygonSelectConfirmHandler = null;
+let polygonSelectMouseDownHandler = null;
 let polygonSelectContextMenuBlocker = null;
+let polygonSelectFinished = false;
 
 // 清除多边形查询事件监听
-function clearPolygonSelectListeners() {
+function clearPolygonSelectListeners(keepContextMenuBlockerTemporarily) {
     if (polygonSelectClickKey) {
         ol.Observable.unByKey(polygonSelectClickKey);
         polygonSelectClickKey = null;
@@ -4563,16 +4565,27 @@ function clearPolygonSelectListeners() {
         polygonSelectMoveKey = null;
     }
 
-    if (polygonSelectRightClickHandler) {
-    map.getViewport().removeEventListener('contextmenu', polygonSelectRightClickHandler, true);
-    polygonSelectRightClickHandler = null;
-}
+    if (polygonSelectMouseDownHandler) {
+        map.getViewport().removeEventListener('mousedown', polygonSelectMouseDownHandler, true);
+        polygonSelectMouseDownHandler = null;
+    }
 
-if (polygonSelectContextMenuBlocker) {
-    document.removeEventListener('contextmenu', polygonSelectContextMenuBlocker, true);
-    polygonSelectContextMenuBlocker = null;
-}
+    if (polygonSelectContextMenuBlocker) {
+        const blocker = polygonSelectContextMenuBlocker;
 
+        if (keepContextMenuBlockerTemporarily) {
+            setTimeout(function () {
+                document.removeEventListener('contextmenu', blocker, true);
+            }, 600);
+        } else {
+            document.removeEventListener('contextmenu', blocker, true);
+        }
+
+        polygonSelectContextMenuBlocker = null;
+    }
+
+    polygonSelectConfirmHandler = null;
+    polygonSelectFinished = false;
     polygonSelectPoints = [];
     polygonSelectFeature = null;
 }
@@ -4622,6 +4635,10 @@ function startPolygonSelect() {
         clearTwoClickQueryListeners();
     }
 
+    if (typeof clearCircleSelectListeners === 'function') {
+        clearCircleSelectListeners();
+    }
+
     clearPolygonSelectListeners();
 
     if (typeof drawLayer !== 'undefined' && drawLayer) {
@@ -4632,6 +4649,7 @@ function startPolygonSelect() {
     alert('多边形查询已开启：左键单击添加范围顶点，右键单击确认查询。');
 
     polygonSelectPoints = [];
+    polygonSelectFinished = false;
 
     polygonSelectFeature = new ol.Feature({
         geometry: new ol.geom.Polygon([])
@@ -4666,7 +4684,11 @@ function startPolygonSelect() {
     drawSource.addFeature(polygonSelectFeature);
 
     // 左键单击：添加一个顶点
-    polygonSelectClickKey = map.on('singleclick', function(evt) {
+    polygonSelectClickKey = map.on('singleclick', function (evt) {
+        if (polygonSelectFinished) {
+            return;
+        }
+
         polygonSelectPoints.push(evt.coordinate);
 
         const polygonGeometry = buildPolygonGeometry(polygonSelectPoints, null);
@@ -4677,46 +4699,59 @@ function startPolygonSelect() {
     });
 
     // 鼠标移动：动态预览线段或多边形
-polygonSelectMoveKey = map.on('pointermove', function(evt) {
-    if (polygonSelectPoints.length < 1 || !polygonSelectFeature) {
-        return;
-    }
-
-    const previewGeometry = buildPolygonGeometry(polygonSelectPoints, evt.coordinate);
-
-    if (previewGeometry) {
-        polygonSelectFeature.setGeometry(previewGeometry);
-    }
-});
-
-    // 右键单击：确认多边形并执行查询
-    polygonSelectRightClickHandler = function(event) {
-        if (event) {
-        event.preventDefault();
-        event.stopPropagation();
-
-        if (typeof event.stopImmediatePropagation === 'function') {
-            event.stopImmediatePropagation();
+    polygonSelectMoveKey = map.on('pointermove', function (evt) {
+        if (
+            polygonSelectFinished ||
+            polygonSelectPoints.length < 1 ||
+            !polygonSelectFeature
+        ) {
+            return;
         }
-    }
+
+        const previewGeometry = buildPolygonGeometry(polygonSelectPoints, evt.coordinate);
+
+        if (previewGeometry) {
+            polygonSelectFeature.setGeometry(previewGeometry);
+        }
+    });
+
+    // 统一的“确认多边形查询”函数
+    polygonSelectConfirmHandler = function (event) {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            if (typeof event.stopImmediatePropagation === 'function') {
+                event.stopImmediatePropagation();
+            }
+        }
+
+        if (polygonSelectFinished) {
+            return;
+        }
 
         if (polygonSelectPoints.length < 3) {
             alert('多边形至少需要 3 个顶点，请继续用左键添加点。');
             return;
         }
 
+        polygonSelectFinished = true;
+
         const finalGeometry = buildPolygonGeometry(polygonSelectPoints, null);
 
         if (!finalGeometry) {
+            polygonSelectFinished = false;
             alert('多边形范围无效，请重新绘制。');
             return;
         }
 
-        polygonSelectFeature.setGeometry(finalGeometry);
+        if (polygonSelectFeature) {
+            polygonSelectFeature.setGeometry(finalGeometry);
+        }
 
         const results = [];
 
-        attractionsSource.getFeatures().forEach(function(feature) {
+        attractionsSource.getFeatures().forEach(function (feature) {
             const geometry = feature.getGeometry();
 
             if (!geometry) {
@@ -4732,24 +4767,62 @@ polygonSelectMoveKey = map.on('pointermove', function(evt) {
 
         showSpatialQueryResult('多边形查询结果', results);
 
-        clearPolygonSelectListeners();
+        // 注意：这里清除的是事件监听，不清除地图上的多边形范围
+        // 多边形范围等用户关闭属性信息框后，由 closeInfoPanel() 里的 clearSpatialQueryRangeFeatures() 清除
+        clearPolygonSelectListeners(true);
 
         alert('多边形查询完成，共查询到 ' + results.length + ' 个景点。');
-}
     };
 
-    polygonSelectContextMenuBlocker = function(event) {
-    const target = event.target;
+    // 右键按下时，立即确认查询
+    polygonSelectMouseDownHandler = function (event) {
+        if (event.button !== 2) {
+            return;
+        }
 
-    if (!target || !target.closest || !target.closest('#map')) {
-        return;
-    }
+        event.preventDefault();
+        event.stopPropagation();
 
-    polygonSelectRightClickHandler(event);
-};
+        if (typeof event.stopImmediatePropagation === 'function') {
+            event.stopImmediatePropagation();
+        }
 
-document.addEventListener('contextmenu', polygonSelectContextMenuBlocker, true);
+        if (typeof polygonSelectConfirmHandler === 'function') {
+            polygonSelectConfirmHandler(event);
+        }
+    };
 
+    map.getViewport().addEventListener('mousedown', polygonSelectMouseDownHandler, true);
+
+    // 禁止浏览器默认右键菜单
+    // 这段会短暂保留到右键菜单事件结束后再移除
+    polygonSelectContextMenuBlocker = function (event) {
+        const target = event.target;
+
+        if (
+            target &&
+            target.closest &&
+            target.closest('#map')
+        ) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            if (typeof event.stopImmediatePropagation === 'function') {
+                event.stopImmediatePropagation();
+            }
+
+            // 兜底：如果 mousedown 没触发成功，这里也能确认查询
+            if (
+                !polygonSelectFinished &&
+                typeof polygonSelectConfirmHandler === 'function'
+            ) {
+                polygonSelectConfirmHandler(event);
+            }
+        }
+    };
+
+    document.addEventListener('contextmenu', polygonSelectContextMenuBlocker, true);
+}
 
 // ===== 圆选查询：第一次左键单击确定圆心，第二次左键单击确认范围 =====
 
