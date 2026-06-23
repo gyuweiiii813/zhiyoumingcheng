@@ -1010,20 +1010,136 @@ function switchBasemap(type) {
 }
 
 function resetView() {
+    // 复位前先关闭临时绘制/查询监听，避免和复位冲突
+    if (typeof clearDraw === 'function') {
+        clearDraw();
+    }
+
+    if (typeof clearBoxSelectListeners === 'function') {
+        clearBoxSelectListeners();
+    }
+
+    if (typeof clearCircleSelectListeners === 'function') {
+        clearCircleSelectListeners();
+    }
+
+    if (typeof clearPolygonSelectListeners === 'function') {
+        clearPolygonSelectListeners();
+    }
+
+    if (typeof clearTwoClickQueryListeners === 'function') {
+        clearTwoClickQueryListeners();
+    }
+
+    // 清除分析/查询临时图层，但不要清空景点图层
+    if (typeof drawSource !== 'undefined' && drawSource) {
+        drawSource.clear();
+    }
+
+    if (typeof bufferSource !== 'undefined' && bufferSource) {
+        bufferSource.clear();
+    }
+
+    if (typeof overlayAnalysisSource !== 'undefined' && overlayAnalysisSource) {
+        overlayAnalysisSource.clear();
+    }
+
+    if (typeof searchResultSource !== 'undefined' && searchResultSource) {
+        searchResultSource.clear();
+    }
+
+    if (typeof trackSource !== 'undefined' && trackSource) {
+        trackSource.clear();
+    }
+
+    if (typeof trackMarkerSource !== 'undefined' && trackMarkerSource) {
+        trackMarkerSource.clear();
+    }
+
+    // 确保普通景点图层显示，关闭聚类和热力图
+    if (typeof attractionsLayer !== 'undefined' && attractionsLayer) {
+        attractionsLayer.setVisible(true);
+        attractionsLayer.setZIndex(1000);
+    }
+
+    if (typeof clusterLayer !== 'undefined' && clusterLayer) {
+        clusterLayer.setVisible(false);
+    }
+
+    if (typeof heatmapLayer !== 'undefined' && heatmapLayer) {
+        heatmapLayer.setVisible(false);
+    }
+
+    // 重新加载基础景点，然后立刻补回 main.js 里新增的景点
     fetch('data/attractions.geojson')
-        .then(res => res.json())
-        .then(data => {
-            const features = new ol.format.GeoJSON().readFeatures(data);
-            attractionsSource.clear();
-            attractionsSource.addFeatures(features);
-            
-            const extent = attractionsSource.getExtent();
-            map.getView().fit(extent, { 
-                padding: [50, 50, 50, 50],
-                duration: 500
-            });
+        .then(function(res) {
+            return res.json();
         })
-        .catch(err => console.error('复位失败:', err));
+        .then(function(data) {
+            const baseFeatures = new ol.format.GeoJSON().readFeatures(data);
+
+            attractionsSource.clear();
+            attractionsSource.addFeatures(baseFeatures);
+
+            // 关键：复位后马上补回后来新增的景点
+            if (typeof supplementProvinceCityAttractions === 'function') {
+                supplementProvinceCityAttractions();
+            }
+
+            if (typeof normalizeAttractionCategories === 'function') {
+                normalizeAttractionCategories();
+            }
+
+            if (typeof normalizeAttractionProvinceCityFields === 'function') {
+                normalizeAttractionProvinceCityFields();
+            }
+
+            if (typeof assignRandomRatingsToAttractions === 'function') {
+                assignRandomRatingsToAttractions();
+            }
+
+            if (typeof removeDuplicateAttractionsByName === 'function') {
+                removeDuplicateAttractionsByName();
+            }
+
+            // 更新全局景点列表，避免下拉框还拿旧数据
+            attractionsFeaturesList = attractionsSource.getFeatures().filter(function(feature) {
+                return feature.getGeometry();
+            });
+
+            // 刷新所有景点相关下拉框
+            if (typeof refreshAttractionQueryDropdown === 'function') {
+                refreshAttractionQueryDropdown();
+            }
+
+            if (typeof refreshRouteAndTrackAttractionSelects === 'function') {
+                refreshRouteAndTrackAttractionSelects();
+            }
+
+            if (typeof forceRefreshRouteAndTrackSelects === 'function') {
+                forceRefreshRouteAndTrackSelects();
+            }
+
+            if (typeof refreshAllQueryAnalysisDropdowns === 'function') {
+                refreshAllQueryAnalysisDropdowns();
+            }
+
+            const extent = attractionsSource.getExtent();
+
+            if (!ol.extent.isEmpty(extent)) {
+                map.getView().fit(extent, {
+                    padding: [50, 50, 50, 50],
+                    duration: 500,
+                    maxZoom: 8
+                });
+            }
+
+            map.renderSync();
+        })
+        .catch(function(err) {
+            console.error('复位失败:', err);
+            alert('复位失败，请检查 data/attractions.geojson 是否能正常加载。');
+        });
 }
 
 function startDraw(type) {
