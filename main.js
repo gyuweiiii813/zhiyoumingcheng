@@ -2180,7 +2180,7 @@ function playTrackAnimation(points) {
     
     let currentIndex = 0;
     let progress = 0;
-    const speed = 2;    
+    const speed = 2.5;    
     function animate() {
         if (currentIndex >= points.length - 1) {
             return;
