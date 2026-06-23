@@ -1880,183 +1880,207 @@ function updateTrackSelectedInfo() {
 
 function confirmTrackSelection() {
     currentTrackPoints = [];
-    trackSource.clear();
-    trackMarkerSource.clear();
-    
+
+    if (typeof trackSource !== 'undefined' && trackSource) {
+        trackSource.clear();
+    }
+
+    if (typeof trackMarkerSource !== 'undefined' && trackMarkerSource) {
+        trackMarkerSource.clear();
+    }
+
+    // 关键：模拟轨迹不要显示路线规划的彩色路况层和路口步骤
+    if (typeof window.clearAmapTrafficRoute === 'function') {
+        window.clearAmapTrafficRoute();
+    }
+
     const originSelect = document.getElementById('trackOrigin');
     const waypointsSelect = document.getElementById('trackWaypoints');
     const destinationSelect = document.getElementById('trackDestination');
-    
+
     const originValue = originSelect.value;
     const destValue = destinationSelect.value;
-    
+
     if (!originValue) {
         alert('请选择起点！');
         return;
     }
-    
+
     if (!destValue) {
         alert('请选择终点！');
         return;
     }
-    
+
     const originCoords = JSON.parse(originValue);
     const destCoords = JSON.parse(destValue);
-    const waypointValues = Array.from(waypointsSelect.selectedOptions).map(opt => JSON.parse(opt.value));
-    
-    const allPoints = [originCoords, ...waypointValues, destCoords];
-    
-    const loadingMsg = document.createElement('div');
-    loadingMsg.className = 'alert alert-info';
-    loadingMsg.id = 'trackLoadingMsg';
-    loadingMsg.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 正在规划路线，请稍候...';
-    
+
+    const waypointValues = Array.from(waypointsSelect.selectedOptions)
+        .map(function(opt) {
+            return JSON.parse(opt.value);
+        });
+
+    const allPoints = [originCoords].concat(waypointValues).concat([destCoords]);
+
+    if (allPoints.length < 2) {
+        alert('轨迹点不足，至少需要起点和终点。');
+        return;
+    }
+
+    // 生成模拟轨迹点：不调用 /api/route，不触发路线规划
+    function createSimulatedTrackPoints(points) {
+        const result = [];
+
+        for (let i = 0; i < points.length - 1; i++) {
+            const start = points[i];
+            const end = points[i + 1];
+
+            const dx = end[0] - start[0];
+            const dy = end[1] - start[1];
+
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            const stepCount = Math.max(25, Math.min(100, Math.ceil(distance * 80)));
+
+            for (let j = 0; j <= stepCount; j++) {
+                if (i > 0 && j === 0) {
+                    continue;
+                }
+
+                const t = j / stepCount;
+
+                const lon = start[0] + dx * t;
+                const lat = start[1] + dy * t;
+
+                result.push([
+                    Number(lon.toFixed(6)),
+                    Number(lat.toFixed(6))
+                ]);
+            }
+        }
+
+        return result;
+    }
+
+    const routeCoords = createSimulatedTrackPoints(allPoints);
+
+    if (routeCoords.length < 2) {
+        alert('模拟轨迹生成失败。');
+        return;
+    }
+
+    currentTrackPoints = routeCoords;
+
+    // 画轨迹线
+    const lineFeature = new ol.Feature({
+        geometry: new ol.geom.LineString(routeCoords)
+    });
+
+    lineFeature.setProperties({
+        type: 'simulated_track',
+        name: '模拟轨迹'
+    });
+
+    lineFeature.setStyle(new ol.style.Style({
+        stroke: new ol.style.Stroke({
+            color: '#e91e63',
+            width: 4,
+            lineDash: [10, 6]
+        })
+    }));
+
+    trackSource.addFeature(lineFeature);
+
+    // 起点
+    const originMarker = new ol.Feature({
+        geometry: new ol.geom.Point(originCoords)
+    });
+
+    originMarker.setStyle(new ol.style.Style({
+        image: new ol.style.Icon({
+            src: 'data:image/svg+xml;utf8,' + encodeURIComponent(
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#4CAF50" width="32" height="32"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>'
+            ),
+            anchor: [0.5, 1]
+        })
+    }));
+
+    trackMarkerSource.addFeature(originMarker);
+
+    // 途经点
+    waypointValues.forEach(function(wp, index) {
+        const wpMarker = new ol.Feature({
+            geometry: new ol.geom.Point(wp)
+        });
+
+        wpMarker.setStyle(new ol.style.Style({
+            image: new ol.style.Icon({
+                src: 'data:image/svg+xml;utf8,' + encodeURIComponent(
+                    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#FF9800" width="28" height="28"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>'
+                ),
+                anchor: [0.5, 1]
+            }),
+            text: new ol.style.Text({
+                text: String(index + 1),
+                font: 'bold 12px Arial',
+                fill: new ol.style.Fill({
+                    color: '#ffffff'
+                }),
+                stroke: new ol.style.Stroke({
+                    color: '#FF9800',
+                    width: 3
+                }),
+                offsetY: -20
+            })
+        }));
+
+        trackMarkerSource.addFeature(wpMarker);
+    });
+
+    // 终点
+    const destMarker = new ol.Feature({
+        geometry: new ol.geom.Point(destCoords)
+    });
+
+    destMarker.setStyle(new ol.style.Style({
+        image: new ol.style.Icon({
+            src: 'data:image/svg+xml;utf8,' + encodeURIComponent(
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#F44336" width="32" height="32"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>'
+            ),
+            anchor: [0.5, 1]
+        })
+    }));
+
+    trackMarkerSource.addFeature(destMarker);
+
+    const extent = trackSource.getExtent();
+
+    if (!ol.extent.isEmpty(extent)) {
+        map.getView().fit(extent, {
+            padding: [80, 420, 80, 80],
+            duration: 500,
+            maxZoom: 10
+        });
+    }
+
     const trackModalEl = document.getElementById('trackModal');
     const trackModal = bootstrap.Modal.getInstance(trackModalEl);
-    
-    trackModalEl.querySelector('.modal-body').appendChild(loadingMsg);
-    
-    function fetchRouteSegment(origin, destination) {
-        const originStr = `${origin[0]},${origin[1]}`;
-        const destStr = `${destination[0]},${destination[1]}`;
-        const url = `/api/route?origin=${originStr}&destination=${destStr}&strategy=0&traffic=1`;
-        
-        return fetch(url)
-            .then(res => res.json())
-            .then(data => {
-                if (data.status !== '1' || !data.route || !data.route.paths || data.route.paths.length === 0) {
-                    throw new Error('路线规划失败');
-                }
-                
-                const path = data.route.paths[0];
-                let coords = [];
-                
-                if (path.steps) {
-                    path.steps.forEach(step => {
-                        if (step.polyline) {
-                            const points = step.polyline.split(';');
-                            points.forEach(p => {
-                                const c = p.split(',');
-                                if (c.length === 2) {
-                                    coords.push([parseFloat(c[0]), parseFloat(c[1])]);
-                                }
-                            });
-                        }
-                    });
-                }
-                
-                return coords;
-            });
+
+    if (trackModal) {
+        trackModal.hide();
     }
-    
-    const routePromises = [];
-    for (let i = 0; i < allPoints.length - 1; i++) {
-        routePromises.push(fetchRouteSegment(allPoints[i], allPoints[i + 1]));
-    }
-    
-    Promise.all(routePromises)
-        .then(allRoutes => {
-            document.getElementById('trackLoadingMsg').remove();
-            
-            let routeCoords = [];
-            allRoutes.forEach((coords, index) => {
-                if (coords.length > 0) {
-                    if (index > 0 && routeCoords.length > 0) {
-                        routeCoords.pop();
-                    }
-                    routeCoords = routeCoords.concat(coords);
-                }
-            });
-            
-            if (routeCoords.length < 2) {
-                alert('路线数据无效');
-                return;
-            }
-            
-            currentTrackPoints = routeCoords;
-            trackSource.clear();
-            trackMarkerSource.clear();
-            
-            const lineFeature = new ol.Feature({
-                geometry: new ol.geom.LineString(routeCoords)
-            });
-            lineFeature.setStyle(new ol.style.Style({
-                stroke: new ol.style.Stroke({
-                    color: '#e91e63',
-                    width: 3
-                })
-            }));
-            trackSource.addFeature(lineFeature);
-            
-            const originMarker = new ol.Feature({
-                geometry: new ol.geom.Point(originCoords)
-            });
-            originMarker.setStyle(new ol.style.Style({
-                image: new ol.style.Icon({
-                    src: 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#4CAF50" width="32" height="32"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>'),
-                    anchor: [0.5, 1]
-                })
-            }));
-            trackMarkerSource.addFeature(originMarker);
-            
-            waypointValues.forEach((wp, index) => {
-                const wpMarker = new ol.Feature({
-                    geometry: new ol.geom.Point(wp)
-                });
-                wpMarker.setStyle(new ol.style.Style({
-                    image: new ol.style.Icon({
-                        src: 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#FF9800" width="28" height="28"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>'),
-                        anchor: [0.5, 1]
-                    }),
-                    text: new ol.style.Text({
-                        text: (index + 1).toString(),
-                        font: 'bold 12px Arial',
-                        fill: new ol.style.Fill({ color: '#fff' }),
-                        stroke: new ol.style.Stroke({ color: '#FF9800', width: 3 }),
-                        offsetY: -20,
-                        textAlign: 'center'
-                    })
-                }));
-                trackMarkerSource.addFeature(wpMarker);
-            });
-            
-            const destMarker = new ol.Feature({
-                geometry: new ol.geom.Point(destCoords)
-            });
-            destMarker.setStyle(new ol.style.Style({
-                image: new ol.style.Icon({
-                    src: 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#F44336" width="32" height="32"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>'),
-                    anchor: [0.5, 1]
-                })
-            }));
-            trackMarkerSource.addFeature(destMarker);
-            
-            const extent = trackSource.getExtent();
-            map.getView().fit(extent, { padding: [50, 50, 50, 50], duration: 500 });
-            
-            trackModal.hide();
-            
-            setTimeout(() => {
-                const trackName = prompt('请输入轨迹名称（留空则不保存）:');
-                if (trackName && trackName.trim()) {
-                    savedTracks.push({
-                        name: trackName.trim(),
-                        points: routeCoords
-                    });
-                    alert('轨迹 "' + trackName + '" 已保存！');
-                }
-            }, 500);
-        })
-        .catch(err => {
-            const loadingEl = document.getElementById('trackLoadingMsg');
-            if (loadingEl) loadingEl.remove();
-            console.error('路线规划失败:', err);
-            alert('路线规划失败，请稍后重试');
-        });
+
+    const originName = originSelect.options[originSelect.selectedIndex]?.text || '起点';
+    const destName = destinationSelect.options[destinationSelect.selectedIndex]?.text || '终点';
+
+    const autoTrackName = originName + ' → ' + destName;
+
+    savedTracks.push({
+        name: autoTrackName,
+        points: routeCoords
+    });
+
+    // 直接播放模拟轨迹
+    playTrackAnimation(routeCoords);
 }
-
-let selectedTrackIndex = null;
-
 function playTrack() {
     if (savedTracks.length === 0) {
         alert('没有已保存的轨迹');
