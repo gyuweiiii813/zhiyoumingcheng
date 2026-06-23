@@ -13505,3 +13505,90 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
         animate();
     };
 })();
+
+// =====================================================
+// 播放轨迹加速最终版
+// 作用：真正加快播放速度，每一帧跳过多个轨迹点
+// =====================================================
+(function () {
+    if (window.__trackReallyFastPatchInstalled) {
+        return;
+    }
+
+    window.__trackReallyFastPatchInstalled = true;
+
+    function createMovingLocationIcon() {
+        const svg = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="38" height="38" viewBox="0 0 64 64">
+                <path d="M32 4C20.4 4 11 13.4 11 25c0 16.5 21 35 21 35s21-18.5 21-35C53 13.4 43.6 4 32 4z"
+                      fill="#1976D2"
+                      stroke="#ffffff"
+                      stroke-width="4"/>
+                <circle cx="32" cy="25" r="8" fill="#ffffff"/>
+                <circle cx="32" cy="25" r="4" fill="#1976D2"/>
+            </svg>
+        `;
+
+        return new ol.style.Style({
+            image: new ol.style.Icon({
+                src: 'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
+                scale: 1,
+                anchor: [0.5, 1]
+            })
+        });
+    }
+
+    window.playTrackAnimation = function (points) {
+        if (!points || points.length < 2) {
+            alert('轨迹点不足');
+            return;
+        }
+
+        if (trackAnimation) {
+            cancelAnimationFrame(trackAnimation);
+            trackAnimation = null;
+        }
+
+        trackMarkerSource.clear();
+
+        let currentIndex = 0;
+
+        // 真正控制速度的是这个：
+        // 数值越大，每一帧跳过的轨迹点越多，播放越快
+        const pointsPerFrame = 18;
+
+        const movingStyle = createMovingLocationIcon();
+
+        function drawMarker(coord) {
+            trackMarkerSource.clear();
+
+            const markerFeature = new ol.Feature({
+                geometry: new ol.geom.Point(coord)
+            });
+
+            markerFeature.setStyle(movingStyle);
+            trackMarkerSource.addFeature(markerFeature);
+        }
+
+        function animate() {
+            if (currentIndex >= points.length - 1) {
+                drawMarker(points[points.length - 1]);
+                trackAnimation = null;
+                return;
+            }
+
+            currentIndex += pointsPerFrame;
+
+            if (currentIndex >= points.length) {
+                currentIndex = points.length - 1;
+            }
+
+            drawMarker(points[currentIndex]);
+
+            trackAnimation = requestAnimationFrame(animate);
+        }
+
+        drawMarker(points[0]);
+        trackAnimation = requestAnimationFrame(animate);
+    };
+})();
