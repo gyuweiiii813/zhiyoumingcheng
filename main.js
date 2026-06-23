@@ -13779,3 +13779,178 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
         setTimeout(forceShowOverlayPanel, 200);
     };
 })();
+
+// =====================================================
+// 景点点击后属性框/天气框防误关闭补丁
+// 作用：解决播放轨迹/清除要素后，点击景点信息框闪现后消失的问题
+// =====================================================
+(function () {
+    if (window.__attractionPanelKeepAfterTrackFixInstalled) {
+        return;
+    }
+
+    window.__attractionPanelKeepAfterTrackFixInstalled = true;
+
+    function isRealAttractionFeature(feature) {
+        if (!feature || !feature.getGeometry()) {
+            return false;
+        }
+
+        const name =
+            feature.get('name') ||
+            feature.get('title') ||
+            feature.get('名称') ||
+            '';
+
+        if (!name) {
+            return false;
+        }
+
+        const type = feature.get('type') || feature.get('drawType') || feature.get('analysisType') || '';
+
+        return ![
+            'box_select',
+            'circle_select',
+            'polygon_select',
+            'spatial_query',
+            'route',
+            'track',
+            'simulated_track',
+            'draw',
+            'user_draw',
+            'measure',
+            'buffer',
+            'overlayPoint'
+        ].includes(type);
+    }
+
+    function forceShowAttractionInfo(feature) {
+        if (!isRealAttractionFeature(feature)) {
+            return;
+        }
+
+        const props = feature.getProperties();
+        const geom = feature.getGeometry();
+        const coords = geom.getCoordinates();
+
+        currentSelectedFeature = feature;
+        window.currentSelectedFeature = feature;
+
+        let html = '<div class="popup-content">';
+
+        const attractionName =
+            typeof getTranslatedProperty === 'function'
+                ? getTranslatedProperty(props, 'name')
+                : (props.name || props.title || props['名称'] || '');
+
+        if (attractionName) {
+            const attractionId = props.name || attractionName;
+
+            html += `
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <h4 style="margin:0;">${attractionName}</h4>
+                    <button id="favoriteBtn" class="btn btn-sm"
+                        style="padding:4px 12px;font-size:0.8rem;"
+                        onclick="toggleFavorite('${String(attractionId).replace(/'/g, "\\'")}')">
+                        ⭐ 收藏
+                    </button>
+                </div>
+            `;
+
+            if (typeof checkFavoriteStatus === 'function') {
+                checkFavoriteStatus(attractionId);
+            }
+        }
+
+        const displayProps = ['description', 'category', 'address', 'rating', 'history', 'poetry'];
+
+        displayProps.forEach(function (key) {
+            const value =
+                typeof getTranslatedProperty === 'function'
+                    ? getTranslatedProperty(props, key)
+                    : props[key];
+
+            if (!value) {
+                return;
+            }
+
+            if (key === 'rating') {
+                html += `<p><span class="label">评分:</span> ${'★'.repeat(Number(value) || 5)}</p>`;
+            } else if (key === 'poetry') {
+                html += `
+                    <div class="poetry-section">
+                        <p><span class="label">📜 相关诗词:</span></p>
+                        <pre style="white-space:pre-wrap;font-family:'Noto Serif SC',serif;font-size:0.85rem;color:#5c3d2e;background:rgba(201,162,39,0.1);padding:10px;border-radius:4px;border-left:3px solid #c9a227;">${value}</pre>
+                    </div>
+                `;
+            } else if (key === 'history') {
+                html += `<p><span class="label">📖 历史沿革:</span></p><p style="text-indent:2em;line-height:1.7;">${value}</p>`;
+            } else {
+                const label =
+                    typeof getLabel === 'function'
+                        ? getLabel(key)
+                        : key;
+
+                html += `<p><span class="label">${label}:</span> ${value}</p>`;
+            }
+        });
+
+        html += '</div>';
+
+        const featureInfo = document.getElementById('featureInfo');
+        const infoPanel = document.getElementById('infoPanel');
+
+        if (featureInfo) {
+            featureInfo.innerHTML = html;
+            featureInfo.style.display = 'block';
+        }
+
+        if (infoPanel) {
+            infoPanel.style.display = 'block';
+            infoPanel.style.visibility = 'visible';
+            infoPanel.style.opacity = '1';
+            infoPanel.classList.add('show');
+        }
+
+        if (typeof showInfoPanel === 'function') {
+            showInfoPanel();
+        }
+
+        // 天气框也重新显示，防止被白名单逻辑误关
+        if (typeof window.showCleanAmapWeatherForFeature === 'function') {
+            window.showCleanAmapWeatherForFeature(feature);
+        }
+
+        if (props.name && typeof loadReviews === 'function') {
+            loadReviews(props.name, coords);
+        }
+    }
+
+    // 在点击景点时，延迟补显示两次，覆盖前面 100ms 的误清空
+    map.on('singleclick', function (evt) {
+        let clickedAttraction = null;
+
+        map.forEachFeatureAtPixel(evt.pixel, function (feature) {
+            if (isRealAttractionFeature(feature)) {
+                clickedAttraction = feature;
+                return true;
+            }
+
+            return false;
+        }, {
+            hitTolerance: 10
+        });
+
+        if (!clickedAttraction) {
+            return;
+        }
+
+        setTimeout(function () {
+            forceShowAttractionInfo(clickedAttraction);
+        }, 180);
+
+        setTimeout(function () {
+            forceShowAttractionInfo(clickedAttraction);
+        }, 450);
+    });
+})();
