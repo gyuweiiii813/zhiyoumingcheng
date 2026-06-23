@@ -13627,3 +13627,71 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
         trackAnimation = requestAnimationFrame(animate);
     };
 })();
+
+// =====================================================
+// 更多结果信息属性框显示修复版
+// 作用：防止“智能推荐 / 路线分析 / 文创建议 / 游客服务圈”等业务分析结果
+// 被前面的天气框/属性框白名单清除逻辑误清空
+// =====================================================
+(function () {
+    if (window.__businessResultPanelFixInstalled) {
+        return;
+    }
+
+    window.__businessResultPanelFixInstalled = true;
+
+    const oldShowBusinessResult = window.showBusinessResult;
+
+    window.showBusinessResult = function (title, html) {
+        const featureInfo = document.getElementById('featureInfo');
+        const infoPanel = document.getElementById('infoPanel');
+
+        if (!featureInfo) {
+            alert(title || '分析结果');
+            return;
+        }
+
+        const content = `
+            <div class="business-result-content">
+                <h6 style="color:#b22126;font-weight:bold;margin-bottom:10px;">
+                    ${title || '分析结果'}
+                </h6>
+                ${html || ''}
+            </div>
+        `;
+
+        // 先正常写一次
+        featureInfo.innerHTML = content;
+        featureInfo.style.display = 'block';
+
+        if (infoPanel) {
+            infoPanel.style.display = 'block';
+            infoPanel.classList.add('show');
+        }
+
+        if (typeof showInfoPanel === 'function') {
+            showInfoPanel();
+        }
+
+        // 关键：延迟再写一次
+        // 因为按钮点击事件冒泡后，白名单清除逻辑可能会把内容清掉
+        setTimeout(function () {
+            const featureInfoAgain = document.getElementById('featureInfo');
+            const infoPanelAgain = document.getElementById('infoPanel');
+
+            if (featureInfoAgain) {
+                featureInfoAgain.innerHTML = content;
+                featureInfoAgain.style.display = 'block';
+            }
+
+            if (infoPanelAgain) {
+                infoPanelAgain.style.display = 'block';
+                infoPanelAgain.classList.add('show');
+            }
+
+            if (typeof showInfoPanel === 'function') {
+                showInfoPanel();
+            }
+        }, 30);
+    };
+})();
