@@ -1210,8 +1210,43 @@ function startRectangleDraw() {
 function enableFeatureEdit() {
     clearDraw();
 
+    // 多选编辑：单击一个要素选中，再单击其他要素继续加入选择
+    // 已选中的要素再次单击会取消选择
     selectInteraction = new ol.interaction.Select({
-        layers: [drawLayer]
+        layers: [drawLayer],
+
+        // 单击触发选择
+        condition: ol.events.condition.click,
+
+        // 每次单击都作为“切换选择”，不会自动清空之前选中的要素
+        toggleCondition: ol.events.condition.click,
+
+        // 同一位置如果有多个要素，允许一起被识别
+        multi: true,
+
+        // 增大一点点击容差，更容易点中线、面边界
+        hitTolerance: 8,
+
+        style: new ol.style.Style({
+            fill: new ol.style.Fill({
+                color: 'rgba(255, 87, 34, 0.25)'
+            }),
+            stroke: new ol.style.Stroke({
+                color: '#ff5722',
+                width: 3,
+                lineDash: [8, 6]
+            }),
+            image: new ol.style.Circle({
+                radius: 8,
+                fill: new ol.style.Fill({
+                    color: '#ff5722'
+                }),
+                stroke: new ol.style.Stroke({
+                    color: '#ffffff',
+                    width: 2
+                })
+            })
+        })
     });
 
     modifyInteraction = new ol.interaction.Modify({
@@ -1221,7 +1256,7 @@ function enableFeatureEdit() {
     map.addInteraction(selectInteraction);
     map.addInteraction(modifyInteraction);
 
-    alert('已进入要素编辑模式：请先点击选择你绘制的要素，然后拖动节点进行编辑。');
+    alert('已进入多选编辑模式：单击要素可选中，继续单击其他要素可多选；再次单击已选要素可取消选择。选中后拖动节点进行编辑。');
 }
 
 // 删除选中的绘制要素
