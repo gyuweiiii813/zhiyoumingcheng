@@ -2074,12 +2074,11 @@ function confirmTrackSelection() {
     const autoTrackName = originName + ' → ' + destName;
 
     savedTracks.push({
-        name: autoTrackName,
-        points: routeCoords
-    });
+    name: autoTrackName,
+    points: routeCoords
+});
 
-    // 直接播放模拟轨迹
-    playTrackAnimation(routeCoords);
+alert('模拟轨迹已绘制完成。如需播放，请点击“播放轨迹”或“轨迹回放”。');
 }
 function playTrack() {
     if (savedTracks.length === 0) {
