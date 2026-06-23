@@ -2180,7 +2180,7 @@ function playTrackAnimation(points) {
     
     let currentIndex = 0;
     let progress = 0;
-    const speed = 2.5;    
+    const speed = 5;    
     function animate() {
         if (currentIndex >= points.length - 1) {
             return;
@@ -13393,6 +13393,111 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
                 })
             }));
 
+            trackMarkerSource.addFeature(markerFeature);
+
+            trackAnimation = requestAnimationFrame(animate);
+        }
+
+        animate();
+    };
+})();
+
+// =====================================================
+// 播放轨迹移动图标优化版
+// 作用：
+// 1. 把播放轨迹的移动点换成蓝色坐标定位图标
+// 2. 播放速度比之前更快一些
+// =====================================================
+(function () {
+    if (window.__trackMovingIconPatchInstalled) {
+        return;
+    }
+
+    window.__trackMovingIconPatchInstalled = true;
+
+    function createMovingLocationIcon() {
+        const svg = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 64 64">
+                <path d="M32 4C20.4 4 11 13.4 11 25c0 16.5 21 35 21 35s21-18.5 21-35C53 13.4 43.6 4 32 4z"
+                      fill="#1976D2"
+                      stroke="#ffffff"
+                      stroke-width="4"/>
+                <circle cx="32" cy="25" r="8"
+                        fill="#ffffff"/>
+                <circle cx="32" cy="25" r="4"
+                        fill="#1976D2"/>
+            </svg>
+        `;
+
+        return new ol.style.Style({
+            image: new ol.style.Icon({
+                src: 'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
+                scale: 1,
+                anchor: [0.5, 1]
+            })
+        });
+    }
+
+    window.playTrackAnimation = function (points) {
+        if (!points || points.length < 2) {
+            alert('轨迹点不足');
+            return;
+        }
+
+        if (trackAnimation) {
+            cancelAnimationFrame(trackAnimation);
+            trackAnimation = null;
+        }
+
+        trackMarkerSource.clear();
+
+        let currentIndex = 0;
+        let progress = 0;
+
+        // 速度设置：数值越大越快
+        // 之前是 0.08，比较慢；这里改成 0.22
+        const speed = 0.22;
+
+        const movingStyle = createMovingLocationIcon();
+
+        function animate() {
+            if (currentIndex >= points.length - 1) {
+                return;
+            }
+
+            const startPoint = points[currentIndex];
+            const endPoint = points[currentIndex + 1];
+
+            progress += speed;
+
+            if (progress >= 1) {
+                progress = 0;
+                currentIndex++;
+
+                if (currentIndex >= points.length - 1) {
+                    trackMarkerSource.clear();
+
+                    const endMarker = new ol.Feature({
+                        geometry: new ol.geom.Point(points[points.length - 1])
+                    });
+
+                    endMarker.setStyle(movingStyle);
+                    trackMarkerSource.addFeature(endMarker);
+
+                    return;
+                }
+            }
+
+            const currentX = startPoint[0] + (endPoint[0] - startPoint[0]) * progress;
+            const currentY = startPoint[1] + (endPoint[1] - startPoint[1]) * progress;
+
+            trackMarkerSource.clear();
+
+            const markerFeature = new ol.Feature({
+                geometry: new ol.geom.Point([currentX, currentY])
+            });
+
+            markerFeature.setStyle(movingStyle);
             trackMarkerSource.addFeature(markerFeature);
 
             trackAnimation = requestAnimationFrame(animate);
