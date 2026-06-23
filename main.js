@@ -13590,7 +13590,7 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
 
         // 真正控制速度的是这个：
         // 数值越大，每一帧跳过的轨迹点越多，播放越快
-        const pointsPerFrame = 18;
+        const pointsPerFrame = 10;
 
         const movingStyle = createMovingLocationIcon();
 
