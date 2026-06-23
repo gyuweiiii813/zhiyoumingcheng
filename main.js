@@ -13454,9 +13454,8 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
         let currentIndex = 0;
         let progress = 0;
 
-        // 速度设置：数值越大越快
-        // 之前是 0.08，比较慢；这里改成 0.22
-        const speed = 0.22;
+        
+        const speed = 2;
 
         const movingStyle = createMovingLocationIcon();
 
