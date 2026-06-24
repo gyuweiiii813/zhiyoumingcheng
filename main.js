@@ -350,6 +350,9 @@
 })();
 
 let currentSelectedFeature = null;
+let isBufferAnalysisSelecting = false;
+window.isBufferAnalysisSelecting = false;
+window.bufferAnalysisResultLockUntil = 0;
 window.currentSelectedFeature = null;
 window.lastAirQualityParams = null;
 
@@ -3975,7 +3978,8 @@ function startBufferAnalysis() {
         alert('请输入正确的缓冲区半径，例如：10、50、100');
         return;
     }
-
+    isBufferAnalysisSelecting = true;
+window.isBufferAnalysisSelecting = true;
     alert('缓冲区分析已开启：请点击一个景点作为分析中心。');
 
     map.once('singleclick', function(evt) {
@@ -3987,9 +3991,12 @@ function startBufferAnalysis() {
         });
 
         if (!centerFeature) {
-            alert('请点击红色景点点位，不能点击空白地图区域。');
-            return;
-        }
+    isBufferAnalysisSelecting = false;
+    window.isBufferAnalysisSelecting = false;
+
+    alert('请点击红色景点点位，不能点击空白地图区域。');
+    return;
+}
 
         const centerCoord = centerFeature.getGeometry().getCoordinates();
         const centerName = getAttractionName(centerFeature) || centerFeature.get('name') || '选中景点';
@@ -4033,9 +4040,12 @@ function startBufferAnalysis() {
         resultFeatures.sort(function(a, b) {
             return a.distance - b.distance;
         });
-
+        window.bufferAnalysisResultLockUntil = Date.now() + 1200;
         showBufferAnalysisResult(centerName, radiusKm, resultFeatures);
-
+        setTimeout(function () {
+    isBufferAnalysisSelecting = false;
+    window.isBufferAnalysisSelecting = false;
+}, 1200);
         map.getView().fit(bufferFeature.getGeometry().getExtent(), {
             padding: [80, 420, 80, 80],
             duration: 800
@@ -4109,6 +4119,23 @@ function showBufferAnalysisResult(centerName, radiusKm, resultFeatures) {
 
     document.getElementById('featureInfo').innerHTML = html;
 document.getElementById('featureInfo').style.display = 'block';
+const infoPanel = document.getElementById('infoPanel');
+
+if (infoPanel) {
+    infoPanel.style.display = 'block';
+    infoPanel.classList.add('show');
+}
+
+if (typeof showInfoPanel === 'function') {
+    showInfoPanel();
+}
+
+// 缓冲区分析时不显示景点天气框，避免和景点基本信息混在一起
+const weatherPanel = document.getElementById('weatherPanel');
+
+if (weatherPanel) {
+    weatherPanel.style.display = 'none';
+}
 }
 
 // 叠加分析：绘制一个多边形，将分析区域与景点图层叠加，统计区域内景点
@@ -4601,10 +4628,12 @@ function toggleClusterLayer() {
 
 // 点击聚类点：多个景点时放大，单个景点时显示信息
 map.on('click', function(evt) {
-    if (!clusterLayer.getVisible()) {
+        if (
+        window.isBufferAnalysisSelecting ||
+        Date.now() < (window.bufferAnalysisResultLockUntil || 0)
+    ) {
         return;
     }
-
     const clusterFeature = map.forEachFeatureAtPixel(evt.pixel, function(feature, layer) {
         if (layer === clusterLayer) {
             return feature;
