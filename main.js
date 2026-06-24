@@ -11793,48 +11793,75 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
     }
 
     function buildTrafficSummary(segments, distance, duration) {
-        const countMap = {
-            '畅通': 0,
-            '缓行': 0,
-            '拥堵': 0,
-            '严重拥堵': 0
-        };
+    const countMap = {
+        '畅通': 0,
+        '缓行': 0,
+        '拥堵': 0,
+        '严重拥堵': 0
+    };
 
-        segments.forEach(function (segment) {
-            if (countMap[segment.trafficText] !== undefined) {
-                countMap[segment.trafficText]++;
-            }
-        });
-
-        let mainStatus = '畅通';
-
-        if (countMap['严重拥堵'] > 0) {
-            mainStatus = '严重拥堵';
-        } else if (countMap['拥堵'] > 0) {
-            mainStatus = '拥堵';
-        } else if (countMap['缓行'] > 0) {
-            mainStatus = '缓行';
+    segments.forEach(function (segment) {
+        if (countMap[segment.trafficText] !== undefined) {
+            countMap[segment.trafficText]++;
         }
+    });
 
-        const style = getTrafficStyle(mainStatus);
+    const total = Math.max(segments.length, 1);
 
-        let speedKmh = 0;
+    const smoothCount = countMap['畅通'];
+    const slowCount = countMap['缓行'];
+    const jamCount = countMap['拥堵'];
+    const heavyJamCount = countMap['严重拥堵'];
 
-        if (Number(distance) > 0 && Number(duration) > 0) {
-            speedKmh = Number(distance) / Number(duration) * 3.6;
-        }
+    const abnormalCount = slowCount + jamCount + heavyJamCount;
+    const jamLikeCount = jamCount + heavyJamCount;
 
-        return {
-            statusText: mainStatus,
-            color: style.color,
-            averageSpeed: Math.round(speedKmh || 35),
-            segmentCount: segments.length,
-            smoothCount: countMap['畅通'],
-            slowCount: countMap['缓行'],
-            jamCount: countMap['拥堵'],
-            heavyJamCount: countMap['严重拥堵']
-        };
+    const abnormalRatio = abnormalCount / total;
+    const jamRatio = jamLikeCount / total;
+    const heavyJamRatio = heavyJamCount / total;
+
+    // 只有大面积拥堵时，整体路况才显示拥堵
+    // 少量缓行/拥堵不影响整体判断，仍显示畅通
+    let mainStatus = '畅通';
+
+    if (heavyJamRatio >= 0.6) {
+        mainStatus = '严重拥堵';
+    } else if (jamRatio >= 0.65) {
+        mainStatus = '拥堵';
+    } else if (abnormalRatio >= 0.8) {
+        mainStatus = '缓行';
     }
+
+    const style = getTrafficStyle(mainStatus);
+
+    let speedKmh = 0;
+
+    if (Number(distance) > 0 && Number(duration) > 0) {
+        speedKmh = Number(distance) / Number(duration) * 3.6;
+    }
+
+    let congestionIndex = 15;
+
+    if (mainStatus === '缓行') {
+        congestionIndex = 45;
+    } else if (mainStatus === '拥堵') {
+        congestionIndex = 70;
+    } else if (mainStatus === '严重拥堵') {
+        congestionIndex = 90;
+    }
+
+    return {
+        statusText: mainStatus,
+        color: style.color,
+        averageSpeed: Math.round(speedKmh || 35),
+        congestionIndex: congestionIndex,
+        segmentCount: segments.length,
+        smoothCount: smoothCount,
+        slowCount: slowCount,
+        jamCount: jamCount,
+        heavyJamCount: heavyJamCount
+    };
+}
 
     function createFallbackRoute(start, end, waypoints) {
         const points = [start].concat(waypoints || []).concat([end]);
@@ -12082,22 +12109,10 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
             trafficRouteSource.addFeature(lineFeature);
         });
 
-        instructions.forEach(function (item) {
-            if (!item.endCoord) {
-                return;
-            }
-
-            const pointFeature = new ol.Feature({
-                geometry: new ol.geom.Point(item.endCoord),
-                index: item.index,
-                instruction: item.instruction,
-                road: item.road,
-                trafficText: item.trafficText,
-                trafficColor: item.trafficColor
-            });
-
-            trafficStepSource.addFeature(pointFeature);
-        });
+                // 不再在地图上显示密集的路段编号点
+        // 地图上只保留路线本身的分段颜色：
+        // 绿色 = 畅通，黄色 = 缓行，橙色 = 拥堵，红色 = 严重拥堵
+        // 如果某一小段不是畅通，会直接通过线段颜色体现
 
         if (trafficRouteSource.getFeatures().length > 0) {
             const extent = trafficRouteSource.getExtent();
@@ -12175,14 +12190,18 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
             </div>
         `;
 
-        if (instructions.length > 0) {
-            html += `<div style="font-weight:bold;margin-bottom:6px;">路口 / 转向步骤</div>`;
+                const abnormalInstructions = instructions.filter(function (item) {
+            return item.trafficText && item.trafficText !== '畅通';
+        });
 
-            instructions.slice(0, 12).forEach(function (item) {
+        if (abnormalInstructions.length > 0) {
+            html += `<div style="font-weight:bold;margin-bottom:6px;">异常路况路段</div>`;
+
+            abnormalInstructions.slice(0, 12).forEach(function (item) {
                 html += `
                     <div style="border-top:1px dashed #ddd;padding:6px 0;">
                         <span style="display:inline-block;width:20px;height:20px;line-height:20px;text-align:center;border-radius:50%;background:${item.trafficColor};color:#fff;font-size:12px;margin-right:6px;">
-                            ${item.index}
+                            !
                         </span>
                         <span>${item.instruction}</span>
                         <span style="float:right;color:${item.trafficColor};font-weight:bold;">${item.trafficText}</span>
@@ -12190,15 +12209,15 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
                 `;
             });
 
-            if (instructions.length > 12) {
+            if (abnormalInstructions.length > 12) {
                 html += `
                     <div style="font-size:12px;color:#888;margin-top:5px;">
-                        仅显示前 12 个路口步骤，共 ${instructions.length} 个步骤。
+                        仅显示前 12 个异常路段，共 ${abnormalInstructions.length} 个异常路段。
                     </div>
                 `;
             }
         } else {
-            html += `<div style="color:#888;">暂无详细路口步骤。</div>`;
+            html += `<div style="color:#00a854;font-weight:bold;">全程整体畅通，暂无需要特别提示的异常路段。</div>`;
         }
 
         panel.innerHTML = html;
