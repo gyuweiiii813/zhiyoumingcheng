@@ -647,13 +647,6 @@ const baseLayers = {
         visible: false
     }),
 
-    terrain: new ol.layer.Tile({
-        source: new ol.source.XYZ({
-            url: 'https://tile.opentopomap.org/{z}/{x}/{y}.png'
-        }),
-        visible: false
-    }),
-
     gaode: new ol.layer.Tile({
         source: new ol.source.XYZ({
             url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}'
@@ -688,16 +681,6 @@ const basemaps = {
             attributions: 'Tiles © Esri'
         }),
         title: 'Esri卫星影像',
-        visible: false
-    }),
-
-    // OpenTopoMap 地形图
-    terrain: new ol.layer.Tile({
-        source: new ol.source.XYZ({
-            url: 'https://tile.opentopomap.org/{z}/{x}/{y}.png',
-            attributions: '© OpenTopoMap'
-        }),
-        title: 'OpenTopoMap地形图',
         visible: false
     }),
 
