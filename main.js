@@ -4351,16 +4351,38 @@ function showOverlayAnalysisResult(resultFeatures, categoryStats, cityStats, are
         html += '</div>';
     }
 
-    const featureInfo = document.getElementById('featureInfo');
+    window.analysisResultLockUntil = Date.now() + 3000;
 
-    if (featureInfo) {
-        featureInfo.innerHTML = html;
-        featureInfo.style.display = 'block';
-    }
+const featureInfo = document.getElementById('featureInfo');
+const infoPanel = document.getElementById('infoPanel');
 
-    if (typeof showInfoPanel === 'function') {
-        showInfoPanel();
-    }
+if (featureInfo) {
+    featureInfo.innerHTML = html;
+    featureInfo.style.display = 'block';
+}
+
+if (infoPanel) {
+    infoPanel.style.display = 'block';
+    infoPanel.style.visibility = 'visible';
+    infoPanel.style.opacity = '1';
+    infoPanel.classList.add('show');
+}
+
+if (typeof showInfoPanel === 'function') {
+    showInfoPanel();
+}
+
+// 叠加分析结果显示时，不显示景点天气框
+const weatherPanel = document.getElementById('weatherPanel');
+
+if (weatherPanel) {
+    weatherPanel.classList.remove(
+        'clean-weather-active',
+        'light-weather-active',
+        'weather-lock-active'
+    );
+    weatherPanel.style.display = 'none';
+}
 }
 
 // 圆选查询：绘制一个圆，查询圆内的景点
@@ -13802,89 +13824,6 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
     };
 })();
 
-// =====================================================
-// 叠加分析结果属性框显示修复版
-// 作用：绘制完叠加分析区域后，强制弹出属性信息框并保留结果内容
-// =====================================================
-(function () {
-    if (window.__overlayResultPanelFixInstalled) {
-        return;
-    }
-
-    window.__overlayResultPanelFixInstalled = true;
-
-    const oldShowOverlayAnalysisResult = window.showOverlayAnalysisResult;
-
-    window.showOverlayAnalysisResult = function (
-        resultFeatures,
-        categoryStats,
-        cityStats,
-        areaText,
-        averageRating
-    ) {
-        // 先执行你原来的叠加分析结果生成逻辑
-        if (typeof oldShowOverlayAnalysisResult === 'function') {
-            oldShowOverlayAnalysisResult(
-                resultFeatures,
-                categoryStats,
-                cityStats,
-                areaText,
-                averageRating
-            );
-        } else {
-            // 兜底：如果原函数丢了，也能显示基础结果
-            const featureInfo = document.getElementById('featureInfo');
-
-            if (featureInfo) {
-                featureInfo.innerHTML = `
-                    <h5 style="color:#b22126;font-weight:bold;">叠加分析结果</h5>
-                    <hr>
-                    <p><strong>分析区域面积：</strong>${areaText || '暂无'}</p>
-                    <p><strong>区域内景点数量：</strong>${resultFeatures ? resultFeatures.length : 0} 个</p>
-                    <p><strong>平均评分：</strong>${averageRating || '暂无'}</p>
-                `;
-            }
-        }
-
-        function forceShowOverlayPanel() {
-            const featureInfo = document.getElementById('featureInfo');
-            const infoPanel = document.getElementById('infoPanel');
-
-            if (featureInfo) {
-                // 如果原函数生成了内容，就保留原内容；如果没有内容，就补基础结果
-                if (!featureInfo.innerHTML.trim()) {
-                    featureInfo.innerHTML = `
-                        <h5 style="color:#b22126;font-weight:bold;">叠加分析结果</h5>
-                        <hr>
-                        <p><strong>分析区域面积：</strong>${areaText || '暂无'}</p>
-                        <p><strong>区域内景点数量：</strong>${resultFeatures ? resultFeatures.length : 0} 个</p>
-                        <p><strong>平均评分：</strong>${averageRating || '暂无'}</p>
-                    `;
-                }
-
-                featureInfo.style.display = 'block';
-            }
-
-            if (infoPanel) {
-                infoPanel.style.display = 'block';
-                infoPanel.style.visibility = 'visible';
-                infoPanel.style.opacity = '1';
-                infoPanel.classList.add('show');
-            }
-
-            if (typeof showInfoPanel === 'function') {
-                showInfoPanel();
-            }
-        }
-
-        // 立即显示一次
-        forceShowOverlayPanel();
-
-        // 延迟再显示两次，防止前面的白名单清除逻辑把它关掉
-        setTimeout(forceShowOverlayPanel, 50);
-        setTimeout(forceShowOverlayPanel, 200);
-    };
-})();
 
 // =====================================================
 // 景点点击后属性框/天气框防误关闭补丁
