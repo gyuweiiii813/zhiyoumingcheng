@@ -12042,6 +12042,7 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
 
         trafficStepLayer = new ol.layer.Vector({
             source: trafficStepSource,
+            visible: false,
             zIndex: 2600,
             style: function (feature) {
                 const index = feature.get('index') || '';
