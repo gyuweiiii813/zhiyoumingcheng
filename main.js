@@ -350,9 +350,15 @@
 })();
 
 let currentSelectedFeature = null;
+
 let isBufferAnalysisSelecting = false;
 window.isBufferAnalysisSelecting = false;
 window.bufferAnalysisResultLockUntil = 0;
+
+// 新增：叠加分析绘制/结果保护锁
+window.isOverlayAnalysisDrawing = false;
+window.analysisResultLockUntil = 0;
+
 window.currentSelectedFeature = null;
 window.lastAirQualityParams = null;
 
@@ -1737,6 +1743,17 @@ function displayFeatureInfo(features) {
 }
 
 map.on('click', function(evt) {
+    // 缓冲区分析选中心、叠加分析绘制区域、分析结果刚弹出时，
+    // 禁止普通景点属性信息覆盖分析结果
+    if (
+        window.isBufferAnalysisSelecting ||
+        window.isOverlayAnalysisDrawing ||
+        Date.now() < (window.bufferAnalysisResultLockUntil || 0) ||
+        Date.now() < (window.analysisResultLockUntil || 0)
+    ) {
+        return;
+    }
+
     const feature = map.forEachFeatureAtPixel(evt.pixel, f => f);
     currentSelectedFeature = feature;
     window.currentSelectedFeature = feature;
@@ -4040,12 +4057,16 @@ window.isBufferAnalysisSelecting = true;
         resultFeatures.sort(function(a, b) {
             return a.distance - b.distance;
         });
-        window.bufferAnalysisResultLockUntil = Date.now() + 1200;
-        showBufferAnalysisResult(centerName, radiusKm, resultFeatures);
-        setTimeout(function () {
+        // 分析结果保护 3 秒，防止景点基本信息把缓冲区结果盖掉
+window.bufferAnalysisResultLockUntil = Date.now() + 3000;
+window.analysisResultLockUntil = Date.now() + 3000;
+
+showBufferAnalysisResult(centerName, radiusKm, resultFeatures);
+
+setTimeout(function () {
     isBufferAnalysisSelecting = false;
     window.isBufferAnalysisSelecting = false;
-}, 1200);
+}, 3000);
         map.getView().fit(bufferFeature.getGeometry().getExtent(), {
             padding: [80, 420, 80, 80],
             duration: 800
@@ -4117,12 +4138,21 @@ function showBufferAnalysisResult(centerName, radiusKm, resultFeatures) {
         html += `</div>`;
     }
 
-    document.getElementById('featureInfo').innerHTML = html;
-document.getElementById('featureInfo').style.display = 'block';
+    window.bufferAnalysisResultLockUntil = Date.now() + 3000;
+window.analysisResultLockUntil = Date.now() + 3000;
+
+const featureInfo = document.getElementById('featureInfo');
 const infoPanel = document.getElementById('infoPanel');
+
+if (featureInfo) {
+    featureInfo.innerHTML = html;
+    featureInfo.style.display = 'block';
+}
 
 if (infoPanel) {
     infoPanel.style.display = 'block';
+    infoPanel.style.visibility = 'visible';
+    infoPanel.style.opacity = '1';
     infoPanel.classList.add('show');
 }
 
@@ -4134,14 +4164,22 @@ if (typeof showInfoPanel === 'function') {
 const weatherPanel = document.getElementById('weatherPanel');
 
 if (weatherPanel) {
+    weatherPanel.classList.remove(
+        'clean-weather-active',
+        'light-weather-active',
+        'weather-lock-active'
+    );
     weatherPanel.style.display = 'none';
 }
+
 }
 
 // 叠加分析：绘制一个多边形，将分析区域与景点图层叠加，统计区域内景点
 function startOverlayAnalysis() {
     clearDraw();
 
+    window.isOverlayAnalysisDrawing = true;
+    window.analysisResultLockUntil = Date.now() + 3000;
     if (!attractionsSource || attractionsSource.getFeatures().length === 0) {
         alert('景点数据还没有加载完成，请稍等几秒后再试。');
         return;
@@ -4179,7 +4217,13 @@ function startOverlayAnalysis() {
                 drawInteraction = null;
             }
 
-            runOverlayAnalysis(analysisAreaFeature);
+            window.analysisResultLockUntil = Date.now() + 3000;
+
+runOverlayAnalysis(analysisAreaFeature);
+
+setTimeout(function () {
+    window.isOverlayAnalysisDrawing = false;
+}, 3000);
         }, 0);
     });
 }
@@ -4238,7 +4282,7 @@ function runOverlayAnalysis(analysisAreaFeature) {
 
     const areaText = formatArea(Math.abs(areaValue));
     const averageRating = ratingCount > 0 ? (ratingTotal / ratingCount).toFixed(1) : '暂无';
-
+    window.analysisResultLockUntil = Date.now() + 3000;
     showOverlayAnalysisResult(resultFeatures, categoryStats, cityStats, areaText, averageRating);
 
     const extent = analysisAreaFeature.getGeometry().getExtent();
@@ -4628,16 +4672,30 @@ function toggleClusterLayer() {
 
 // 点击聚类点：多个景点时放大，单个景点时显示信息
 map.on('click', function(evt) {
-        if (
-        window.isBufferAnalysisSelecting ||
-        Date.now() < (window.bufferAnalysisResultLockUntil || 0)
+    // 聚类图层没打开时，不处理聚类点击
+    if (
+        typeof clusterLayer === 'undefined' ||
+        !clusterLayer ||
+        !clusterLayer.getVisible()
     ) {
         return;
     }
+
+    // 缓冲区 / 叠加分析期间，不让聚类点击干扰分析结果
+    if (
+        window.isBufferAnalysisSelecting ||
+        window.isOverlayAnalysisDrawing ||
+        Date.now() < (window.bufferAnalysisResultLockUntil || 0) ||
+        Date.now() < (window.analysisResultLockUntil || 0)
+    ) {
+        return;
+    }
+
     const clusterFeature = map.forEachFeatureAtPixel(evt.pixel, function(feature, layer) {
         if (layer === clusterLayer) {
             return feature;
         }
+
         return null;
     });
 
@@ -4669,7 +4727,6 @@ map.on('click', function(evt) {
         showSpatialQueryResult('聚类分析结果', features);
     }
 });
-
 // 显示属性 / 查询结果弹窗
 function showInfoPanel() {
     const panel = document.getElementById('infoPanel');
@@ -13874,12 +13931,18 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
     }
 
     function forceShowAttractionInfo(feature) {
-        if (
-    window.isBufferAnalysisSelecting ||
-    Date.now() < (window.bufferAnalysisResultLockUntil || 0)
-) {
-    return;
-}
+    if (
+        window.isBufferAnalysisSelecting ||
+        window.isOverlayAnalysisDrawing ||
+        Date.now() < (window.bufferAnalysisResultLockUntil || 0) ||
+        Date.now() < (window.analysisResultLockUntil || 0)
+    ) {
+        return;
+    }
+
+    if (!isRealAttractionFeature(feature)) {
+        return;
+    }
         if (!isRealAttractionFeature(feature)) {
             return;
         }
