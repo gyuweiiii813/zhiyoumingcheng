@@ -13874,6 +13874,12 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
     }
 
     function forceShowAttractionInfo(feature) {
+        if (
+    window.isBufferAnalysisSelecting ||
+    Date.now() < (window.bufferAnalysisResultLockUntil || 0)
+) {
+    return;
+}
         if (!isRealAttractionFeature(feature)) {
             return;
         }
