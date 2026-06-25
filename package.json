@@ -1,0 +1,13 @@
+{
+  "name": "travel-map-app",
+  "version": "1.0.0",
+  "description": "Travel Map Application",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "sqlite3": "^5.1.7"
+  }
+}

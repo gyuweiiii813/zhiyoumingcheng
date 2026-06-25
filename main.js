@@ -13994,3 +13994,165 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
         }, 450);
     });
 })();
+
+// =====================================================
+// AI 文旅助手前端功能
+// =====================================================
+
+window.AI_API_BASE = window.AI_API_BASE || '';
+
+function appendAIMessage(role, text) {
+    const history = document.getElementById('aiChatHistory');
+
+    if (!history) {
+        return null;
+    }
+
+    const item = document.createElement('div');
+
+    if (role === 'user') {
+        item.className = 'ai-message ai-message-user';
+        item.innerHTML = '<strong>我：</strong>' + escapeAIHTML(text);
+    } else if (role === 'loading') {
+        item.className = 'ai-message ai-message-bot ai-message-loading';
+        item.innerHTML = 'AI 正在思考，请稍候...';
+    } else {
+        item.className = 'ai-message ai-message-bot';
+        item.innerHTML = '<strong>AI：</strong>' + formatAIAnswer(text);
+    }
+
+    history.appendChild(item);
+    history.scrollTop = history.scrollHeight;
+
+    return item;
+}
+
+function escapeAIHTML(text) {
+    return String(text || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function formatAIAnswer(text) {
+    return escapeAIHTML(text).replace(/\n/g, '<br>');
+}
+
+function getAIMapContext() {
+    const context = {};
+
+    try {
+        if (typeof currentSelectedFeature !== 'undefined' && currentSelectedFeature) {
+            context.selectedAttraction = {
+                name: currentSelectedFeature.get('name') || '',
+                category: currentSelectedFeature.get('category') || '',
+                address: currentSelectedFeature.get('address') || '',
+                rating: currentSelectedFeature.get('rating') || '',
+                description: currentSelectedFeature.get('description') || ''
+            };
+        }
+
+        if (typeof attractionsSource !== 'undefined' && attractionsSource) {
+            const features = attractionsSource.getFeatures();
+
+            context.attractionCount = features.length;
+            context.sampleAttractions = features.slice(0, 20).map(function(feature) {
+                return {
+                    name: feature.get('name') || '',
+                    category: feature.get('category') || '',
+                    city: feature.get('city') || '',
+                    province: feature.get('province') || '',
+                    rating: feature.get('rating') || ''
+                };
+            });
+        }
+    } catch (e) {
+        console.warn('AI 上下文获取失败：', e);
+    }
+
+    return context;
+}
+
+async function sendToAI(message) {
+    const response = await fetch(window.AI_API_BASE + '/api/chat', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            message: message,
+            context: getAIMapContext()
+        })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+        throw new Error(data.error || 'AI 请求失败');
+    }
+
+    return data.answer;
+}
+
+async function sendAIChatMessage() {
+    const input = document.getElementById('aiChatInput');
+
+    if (!input) {
+        alert('没有找到 AI 输入框。');
+        return;
+    }
+
+    const message = input.value.trim();
+
+    if (!message) {
+        alert('请输入要咨询的问题。');
+        return;
+    }
+
+    appendAIMessage('user', message);
+    input.value = '';
+
+    const loadingItem = appendAIMessage('loading', '');
+
+    try {
+        const answer = await sendToAI(message);
+
+        if (loadingItem) {
+            loadingItem.className = 'ai-message ai-message-bot';
+            loadingItem.innerHTML = '<strong>AI：</strong>' + formatAIAnswer(answer);
+        }
+    } catch (error) {
+        console.error('AI问答失败：', error);
+
+        if (loadingItem) {
+            loadingItem.className = 'ai-message ai-message-bot';
+            loadingItem.innerHTML =
+                '<strong>AI：</strong>调用失败：' +
+                escapeAIHTML(error.message) +
+                '<br>请确认你是通过 http://localhost:8080 打开的项目，并且 server.js 正在运行。';
+        }
+    }
+}
+
+function clearAIChat() {
+    const history = document.getElementById('aiChatHistory');
+
+    if (history) {
+        history.innerHTML = `
+            <div class="ai-message ai-message-bot">
+                你好，我是智游名城 AI 助手。你可以问我景点推荐、路线安排、空间分析结果解读等问题。
+            </div>
+        `;
+    }
+}
+
+function setAIQuestion(text) {
+    const input = document.getElementById('aiChatInput');
+
+    if (input) {
+        input.value = text;
+        input.focus();
+    }
+}

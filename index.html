@@ -171,7 +171,33 @@
 
     <div id="rightAnalysisPanel" class="right-analysis-panel">
     <h5>查询分析区</h5>
+    <div class="ai-chat-box">
+    <div class="ai-chat-title">🤖 AI 文旅助手</div>
 
+    <div id="aiChatHistory" class="ai-chat-history">
+        <div class="ai-message ai-message-bot">
+            你好，我是智游名城 AI 助手。你可以问我景点推荐、路线安排、空间分析结果解读等问题。
+        </div>
+    </div>
+
+    <textarea
+        id="aiChatInput"
+        class="ai-chat-input"
+        rows="3"
+        placeholder="例如：帮我推荐一条适合半日游的自然风光路线"
+    ></textarea>
+
+    <div class="ai-chat-actions">
+        <button type="button" onclick="sendAIChatMessage()" class="ai-send-btn">发送</button>
+        <button type="button" onclick="clearAIChat()" class="ai-clear-btn">清空</button>
+    </div>
+
+    <div class="ai-quick-questions">
+        <button type="button" onclick="setAIQuestion('请推荐一条适合半日游的自然风光路线。')">半日游路线</button>
+        <button type="button" onclick="setAIQuestion('请推荐几个适合自然风光游览的景点，并说明理由。')">自然风光推荐</button>
+        <button type="button" onclick="setAIQuestion('请解释一下缓冲区分析和叠加分析在旅游规划中的作用。')">分析功能解读</button>
+    </div>
+</div>
     <div class="right-query-section">
         <div class="right-section-title">景点查询</div>
 
