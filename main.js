@@ -348,16 +348,20 @@
         return originalFetch(input, init);
     };
 })();
-
 let currentSelectedFeature = null;
 
 let isBufferAnalysisSelecting = false;
 window.isBufferAnalysisSelecting = false;
 window.bufferAnalysisResultLockUntil = 0;
 
-// 新增：叠加分析绘制/结果保护锁
+// 叠加分析绘制/结果保护锁
 window.isOverlayAnalysisDrawing = false;
 window.analysisResultLockUntil = 0;
+
+// 游客服务圈分析保护锁
+let isServiceCircleSelecting = false;
+window.isServiceCircleSelecting = false;
+window.serviceCircleResultLockUntil = 0;
 
 window.currentSelectedFeature = null;
 window.lastAirQualityParams = null;
@@ -1726,13 +1730,15 @@ function displayFeatureInfo(features) {
 }
 
 map.on('click', function(evt) {
-    // 缓冲区分析选中心、叠加分析绘制区域、分析结果刚弹出时，
+    // 缓冲区、叠加分析、游客服务圈分析进行中或结果刚弹出时，
     // 禁止普通景点属性信息覆盖分析结果
     if (
         window.isBufferAnalysisSelecting ||
         window.isOverlayAnalysisDrawing ||
+        window.isServiceCircleSelecting ||
         Date.now() < (window.bufferAnalysisResultLockUntil || 0) ||
-        Date.now() < (window.analysisResultLockUntil || 0)
+        Date.now() < (window.analysisResultLockUntil || 0) ||
+        Date.now() < (window.serviceCircleResultLockUntil || 0)
     ) {
         return;
     }
@@ -6157,7 +6163,6 @@ function createBusinessGeodesicCircle(centerCoord, radiusMeters, points) {
 }
 
 
-// 游客服务圈分析
 function startServiceCircleAnalysis() {
     const radiusInput = prompt('请输入游客服务圈半径，单位：千米', '100');
 
@@ -6171,6 +6176,11 @@ function startServiceCircleAnalysis() {
         alert('请输入正确的半径数值。');
         return;
     }
+
+    // 关键：进入游客服务圈选点状态，防止普通景点属性框抢显示
+    isServiceCircleSelecting = true;
+    window.isServiceCircleSelecting = true;
+    window.serviceCircleResultLockUntil = Date.now() + 3000;
 
     alert('游客服务圈分析已开启：请在地图上单击一个景点作为服务圈中心。');
 
@@ -6190,6 +6200,9 @@ function startServiceCircleAnalysis() {
         );
 
         if (!selectedFeature) {
+            isServiceCircleSelecting = false;
+            window.isServiceCircleSelecting = false;
+
             alert('没有选中景点，请重新点击“游客服务圈分析”，并单击地图上的景点标记。');
             return;
         }
@@ -6297,7 +6310,17 @@ function startServiceCircleAnalysis() {
             </ol>
         `;
 
+        // 关键：显示结果前加锁，防止景点基本属性框延迟覆盖
+        window.serviceCircleResultLockUntil = Date.now() + 3000;
+        window.analysisResultLockUntil = Date.now() + 3000;
+
         showBusinessResult('游客服务圈分析', html);
+
+        // 3 秒后解除游客服务圈选点状态
+        setTimeout(function() {
+            isServiceCircleSelecting = false;
+            window.isServiceCircleSelecting = false;
+        }, 3000);
     });
 }
 
@@ -13856,8 +13879,10 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
     if (
         window.isBufferAnalysisSelecting ||
         window.isOverlayAnalysisDrawing ||
+        window.isServiceCircleSelecting ||
         Date.now() < (window.bufferAnalysisResultLockUntil || 0) ||
-        Date.now() < (window.analysisResultLockUntil || 0)
+        Date.now() < (window.analysisResultLockUntil || 0) ||
+        Date.now() < (window.serviceCircleResultLockUntil || 0)
     ) {
         return;
     }
