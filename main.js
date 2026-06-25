@@ -13999,7 +13999,7 @@ setTimeout(removeDuplicateAttractionsByName, 6000);
 // AI 文旅助手前端功能
 // =====================================================
 
-window.AI_API_BASE = window.AI_API_BASE || '';
+window.AI_API_BASE = 'https://zhiyoumingcheng.onrender.com';
 
 function appendAIMessage(role, text) {
     const history = document.getElementById('aiChatHistory');
